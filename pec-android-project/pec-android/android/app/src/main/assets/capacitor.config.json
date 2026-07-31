@@ -1,0 +1,28 @@
+{
+	"appId": "com.abarta.pec",
+	"appName": "Power Equipment Checkout",
+	"webDir": "www",
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 1500,
+			"backgroundColor": "#1e3a5f",
+			"androidScaleType": "CENTER_CROP",
+			"showSpinner": false
+		},
+		"StatusBar": {
+			"style": "dark",
+			"backgroundColor": "#1e3a5f"
+		},
+		"Camera": {
+			"promptLabelPhoto": "Take Photo",
+			"promptLabelPicture": "Choose from Gallery"
+		}
+	},
+	"android": {
+		"allowMixedContent": false,
+		"backgroundColor": "#1e3a5f"
+	}
+}
