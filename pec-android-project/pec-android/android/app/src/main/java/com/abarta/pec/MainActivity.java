@@ -12,6 +12,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -21,9 +22,8 @@ import java.util.Set;
 /**
  * Main activity with NFC foreground dispatch.
  *
- * Uses addJavascriptInterface to expose a native NFC bridge to any page
- * loaded in the WebView. Also injects a Web NFC (NDEFReader) polyfill
- * that uses the native bridge, so the CRAW PWA works without modification.
+ * Reads NFC badges natively and delivers the badge UID to the WebView
+ * through multiple mechanisms to ensure the CRAW PWA receives it.
  */
 public class MainActivity extends BridgeActivity {
 
@@ -32,59 +32,61 @@ public class MainActivity extends BridgeActivity {
     private PendingIntent nfcPendingIntent;
     private IntentFilter[] nfcIntentFilters;
     private Handler mainHandler;
+    private String lastScannedBadge = null;
 
     /**
-     * NFC bridge injection script.
-     * Overrides PecAuth.readNfcBadge (what the CRAW PWA actually calls)
-     * to wait for native 'nfc-tag-discovered' events from Android.
-     * Also polyfills NDEFReader as a fallback.
-     * Idempotent — safe to inject multiple times.
+     * Script injected at document start (API 33+) and via retries.
+     * Sets up the NFC bridge so the page can receive badge IDs.
      */
-    private static final String NFC_POLYFILL_JS =
+    private static final String NFC_SETUP_JS =
         "(function() {" +
-        "  if (window.__pecNfcBridgeInstalled) return;" +
-        "  window.__pecNfcBridgeInstalled = true;" +
-        // Override PecAuth.readNfcBadge — this is what the CRAW PWA calls
-        "  function installPecAuthOverride() {" +
-        "    if (typeof PecAuth === 'undefined') return false;" +
-        "    PecAuth.readNfcBadge = function() {" +
-        "      return new Promise(function(resolve) {" +
-        "        var timeout = setTimeout(function() { cleanup(); resolve(null); }, 30000);" +
-        "        function handler(e) {" +
-        "          clearTimeout(timeout);" +
-        "          cleanup();" +
-        "          var uid = e.detail && e.detail.tagId ? e.detail.tagId : null;" +
-        "          console.log('[PEC-NFC] Badge read: ' + uid);" +
-        "          resolve(uid);" +
-        "        }" +
-        "        function cleanup() { window.removeEventListener('nfc-tag-discovered', handler); }" +
-        "        window.addEventListener('nfc-tag-discovered', handler);" +
-        "        console.log('[PEC-NFC] Waiting for badge tap...');" +
-        "      });" +
-        "    };" +
-        "    console.log('[PEC-NFC] PecAuth.readNfcBadge overridden');" +
-        "    return true;" +
+        "  if (window.__pecNfcReady) return;" +
+        "  window.__pecNfcReady = true;" +
+        // Store last badge for retrieval
+        "  window.__pecLastBadge = null;" +
+        // Override PecAuth.readNfcBadge if it exists
+        "  function tryOverride() {" +
+        "    if (typeof PecAuth !== 'undefined') {" +
+        "      PecAuth.readNfcBadge = function() {" +
+        "        return new Promise(function(resolve) {" +
+        "          console.log('[PEC-NFC] readNfcBadge called, waiting for tap...');" +
+        "          if (window.__pecLastBadge) {" +
+        "            var b = window.__pecLastBadge; window.__pecLastBadge = null;" +
+        "            resolve(b); return;" +
+        "          }" +
+        "          var t = setTimeout(function() { c(); resolve(null); }, 30000);" +
+        "          function h(e) { clearTimeout(t); c(); resolve(e.detail.tagId); }" +
+        "          function c() { window.removeEventListener('nfc-tag-discovered', h); }" +
+        "          window.addEventListener('nfc-tag-discovered', h);" +
+        "        });" +
+        "      };" +
+        "      return true;" +
+        "    }" +
+        "    return false;" +
         "  }" +
-        // Try immediately, then poll every 100ms until PecAuth exists
-        "  if (!installPecAuthOverride()) {" +
-        "    var iv = setInterval(function() {" +
-        "      if (installPecAuthOverride()) clearInterval(iv);" +
-        "    }, 100);" +
-        "    setTimeout(function() { clearInterval(iv); }, 15000);" +
+        "  if (!tryOverride()) {" +
+        "    var iv = setInterval(function() { if(tryOverride()) clearInterval(iv); }, 200);" +
+        "    setTimeout(function() { clearInterval(iv); }, 20000);" +
         "  }" +
-        // Also polyfill NDEFReader in case it's checked
+        // NDEFReader polyfill
         "  if (!window.NDEFReader) {" +
         "    window.NDEFReader = function() {};" +
         "    window.NDEFReader.prototype.scan = function() {" +
-        "      var self = this;" +
+        "      var s = this;" +
         "      window.addEventListener('nfc-tag-discovered', function(e) {" +
-        "        if (self.onreading) self.onreading({ serialNumber: e.detail.tagId, message: { records: [] } });" +
+        "        if (s.onreading) s.onreading({serialNumber:e.detail.tagId,message:{records:[]}});" +
         "      });" +
         "      return Promise.resolve();" +
         "    };" +
         "  }" +
+        "  if (navigator.permissions) {" +
+        "    var oq = navigator.permissions.query.bind(navigator.permissions);" +
+        "    navigator.permissions.query = function(d) {" +
+        "      if (d && d.name === 'nfc') return Promise.resolve({state:'granted',onchange:null});" +
+        "      return oq(d);" +
+        "    };" +
+        "  }" +
         "  window.PecNfcAvailable = true;" +
-        "  console.log('[PEC-NFC] Bridge script loaded');" +
         "})();";
 
     @Override
@@ -95,19 +97,19 @@ public class MainActivity extends BridgeActivity {
         mainHandler = new Handler(Looper.getMainLooper());
         WebView webView = getBridge().getWebView();
 
-        // Expose native NFC bridge via JavascriptInterface (always available, survives navigation)
+        // Expose native bridge (always available, survives navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
 
-        // API 33+: inject polyfill at document start (before ANY page JS runs)
+        // API 33+: inject at document start (before page JS)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Set<String> origins = new HashSet<>();
             origins.add("*");
-            webView.addDocumentStartJavaScript(NFC_POLYFILL_JS, origins);
-            Log.i(TAG, "Using addDocumentStartJavaScript for early NFC polyfill");
+            webView.addDocumentStartJavaScript(NFC_SETUP_JS, origins);
+            Log.i(TAG, "addDocumentStartJavaScript registered");
         }
 
-        // Also inject with retries as fallback (covers API <33 and initial page)
-        injectPolyfillWithRetries();
+        // Also inject with retries
+        injectSetupWithRetries();
 
         // Set up NFC adapter
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
@@ -136,8 +138,7 @@ public class MainActivity extends BridgeActivity {
         if (nfcAdapter != null) {
             nfcAdapter.enableForegroundDispatch(this, nfcPendingIntent, nfcIntentFilters, null);
         }
-        // Re-inject polyfill when app comes back to foreground (page may have reloaded)
-        injectPolyfillWithRetries();
+        injectSetupWithRetries();
     }
 
     @Override
@@ -164,44 +165,90 @@ public class MainActivity extends BridgeActivity {
             if (tag != null) {
                 String uid = bytesToHex(tag.getId());
                 Log.i(TAG, "Tag UID: " + uid);
-                dispatchTagToWebView(uid);
+                lastScannedBadge = uid;
+
+                // Show native toast so user KNOWS the scan worked
+                runOnUiThread(() ->
+                    Toast.makeText(this, "Badge scanned: " + uid, Toast.LENGTH_SHORT).show()
+                );
+
+                // Deliver to WebView
+                deliverBadgeToWebView(uid);
             }
         }
     }
 
     /**
-     * Inject polyfill then dispatch the NFC tag event to the WebView.
+     * Deliver the badge UID to the web page using every mechanism available:
+     * 1. Custom event (nfc-tag-discovered)
+     * 2. Set window.__pecLastBadge for PecAuth.readNfcBadge to pick up
+     * 3. Try calling PecAuth.readNfcBadge resolve callback
+     * 4. Try filling any visible badge/NFC input fields on the page
+     * 5. Show a visible banner on the page with the badge ID
      */
-    private void dispatchTagToWebView(String tagId) {
+    private void deliverBadgeToWebView(String tagId) {
         WebView webView = getBridge().getWebView();
-        // Ensure polyfill is present, then fire the event
-        String js = NFC_POLYFILL_JS +
-            "window.dispatchEvent(new CustomEvent('nfc-tag-discovered', " +
-            "{ detail: { tagId: '" + tagId + "' } }));";
+        String safeId = tagId.replace("'", "\\'");
+
+        String js =
+            "(function() {" +
+            "  var uid = '" + safeId + "';" +
+            "  console.log('[PEC-NFC] Delivering badge: ' + uid);" +
+            // Store for later retrieval
+            "  window.__pecLastBadge = uid;" +
+            // Dispatch custom event
+            "  window.dispatchEvent(new CustomEvent('nfc-tag-discovered', {detail:{tagId:uid}}));" +
+            // Try calling global NFC callbacks
+            "  try { if(window.onNfcRead) window.onNfcRead(uid); } catch(e){}" +
+            "  try { if(window.onBadgeScanned) window.onBadgeScanned(uid); } catch(e){}" +
+            "  try { if(window.handleNfcTag) window.handleNfcTag(uid); } catch(e){}" +
+            "  try { if(typeof PecAuth!=='undefined' && PecAuth.onBadgeScanned) PecAuth.onBadgeScanned(uid); } catch(e){}" +
+            // Try to find and fill input fields that look badge-related
+            "  var filled = false;" +
+            "  var inputs = document.querySelectorAll('input');" +
+            "  for(var i=0; i<inputs.length; i++) {" +
+            "    var inp = inputs[i];" +
+            "    var id = (inp.id||'').toLowerCase();" +
+            "    var name = (inp.name||'').toLowerCase();" +
+            "    var ph = (inp.placeholder||'').toLowerCase();" +
+            "    if(id.indexOf('badge')>=0||id.indexOf('nfc')>=0||id.indexOf('card')>=0||" +
+            "       name.indexOf('badge')>=0||name.indexOf('nfc')>=0||name.indexOf('card')>=0||" +
+            "       ph.indexOf('badge')>=0||ph.indexOf('scan')>=0) {" +
+            "      inp.value = uid;" +
+            "      inp.dispatchEvent(new Event('input',{bubbles:true}));" +
+            "      inp.dispatchEvent(new Event('change',{bubbles:true}));" +
+            "      filled = true;" +
+            "    }" +
+            "  }" +
+            // Show a visible banner at the top of the page
+            "  var banner = document.getElementById('pec-nfc-banner');" +
+            "  if(!banner) {" +
+            "    banner = document.createElement('div');" +
+            "    banner.id = 'pec-nfc-banner';" +
+            "    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;" +
+            "      background:#4CAF50;color:white;padding:12px;text-align:center;" +
+            "      font-size:16px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';" +
+            "    document.body.appendChild(banner);" +
+            "  }" +
+            "  banner.textContent = '✓ Badge: ' + uid;" +
+            "  banner.style.display = 'block';" +
+            "  setTimeout(function(){ banner.style.display='none'; }, 5000);" +
+            "})();";
+
         webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
-    /**
-     * Inject the polyfill multiple times with delays to cover page load timing.
-     * On API 33+ addDocumentStartJavaScript handles it, but this is a fallback.
-     */
-    private void injectPolyfillWithRetries() {
+    private void injectSetupWithRetries() {
         WebView webView = getBridge().getWebView();
-        // Inject at multiple intervals to cover various page load timings
-        int[] delays = {0, 250, 500, 1000, 1500, 2500, 4000, 6000};
+        int[] delays = {0, 300, 700, 1500, 3000, 5000};
         for (int delay : delays) {
             if (delay == 0) {
-                webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null));
+                webView.post(() -> webView.evaluateJavascript(NFC_SETUP_JS, null));
             } else {
                 mainHandler.postDelayed(() ->
-                    webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), delay);
+                    webView.post(() -> webView.evaluateJavascript(NFC_SETUP_JS, null)), delay);
             }
         }
-    }
-
-    private void injectNfcPolyfill() {
-        WebView webView = getBridge().getWebView();
-        webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null));
     }
 
     private static String bytesToHex(byte[] bytes) {
@@ -215,8 +262,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Native NFC bridge exposed to JavaScript via addJavascriptInterface.
-     * Available as window.PecNfcNative in any page loaded in the WebView.
+     * Native NFC bridge exposed to JavaScript as window.PecNfcNative.
      */
     public class NfcJsBridge {
         @JavascriptInterface
@@ -227,6 +273,11 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public boolean isEnabled() {
             return nfcAdapter != null && nfcAdapter.isEnabled();
+        }
+
+        @JavascriptInterface
+        public String getLastBadge() {
+            return lastScannedBadge;
         }
     }
 }
