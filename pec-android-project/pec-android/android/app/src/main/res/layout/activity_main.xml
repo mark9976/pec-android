@@ -16,7 +16,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:text="PEC 2026.08.12-D"
+        android:text="PEC 2026.08.12-E"
         android:textColor="#00FF00"
         android:textSize="10sp"
         android:fontFamily="monospace"

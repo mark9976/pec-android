@@ -24,7 +24,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "PEC-NFC";
-    private static final String BUILD_VERSION = "2026.08.12-D";
+    private static final String BUILD_VERSION = "2026.08.12-E";
     private NfcAdapter nfcAdapter;
     private PendingIntent nfcPendingIntent;
     private Handler mainHandler;
@@ -38,17 +38,13 @@ public class MainActivity extends BridgeActivity {
         "(function() {" +
         "  if (window.__pecNfcReady) return;" +
         "  window.__pecNfcReady = true;" +
-        "  window.__pecLastBadge = null;" +
         "  function tryOverride() {" +
         "    if (typeof PecAuth !== 'undefined') {" +
         "      PecAuth.readNfcBadge = function() {" +
         "        return new Promise(function(resolve) {" +
-        "          if (window.__pecLastBadge) {" +
-        "            var b = window.__pecLastBadge; window.__pecLastBadge = null;" +
-        "            resolve(b); return;" +
-        "          }" +
+        "          console.log('[PEC-NFC] Waiting for badge tap...');" +
         "          var t = setTimeout(function() { c(); resolve(null); }, 30000);" +
-        "          function h(e) { clearTimeout(t); c(); resolve(e.detail.tagId); }" +
+        "          function h(e) { clearTimeout(t); c(); console.log('[PEC-NFC] Got badge: '+e.detail.tagId); resolve(e.detail.tagId); }" +
         "          function c() { window.removeEventListener('nfc-tag-discovered', h); }" +
         "          window.addEventListener('nfc-tag-discovered', h);" +
         "        });" +
@@ -166,7 +162,8 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Deliver badge UID to the web page via JavaScript injection.
+     * Deliver badge UID to the web page by dispatching the nfc-tag-discovered event.
+     * The PecAuth.readNfcBadge override listens for this event.
      */
     private void deliverBadgeToWebView(String tagId) {
         if (webView == null) {
@@ -174,39 +171,8 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         String safeId = tagId.replace("'", "\\'").replace("\\", "\\\\");
-
-        String js =
-            "(function() {" +
-            "  var uid = '" + safeId + "';" +
-            "  console.log('[PEC-NFC] Delivering badge: ' + uid);" +
-            "  window.__pecLastBadge = uid;" +
-            // Fire custom event
-            "  window.dispatchEvent(new CustomEvent('nfc-tag-discovered', {detail:{tagId:uid}}));" +
-            // Try known global functions
-            "  try { if(window.onNfcRead) window.onNfcRead(uid); } catch(e){}" +
-            "  try { if(window.onBadgeScanned) window.onBadgeScanned(uid); } catch(e){}" +
-            "  try { if(typeof PecAuth!=='undefined' && PecAuth.onBadgeScanned) PecAuth.onBadgeScanned(uid); } catch(e){}" +
-            // Fill any badge-related inputs
-            "  var inputs = document.querySelectorAll('input');" +
-            "  for(var i=0; i<inputs.length; i++) {" +
-            "    var inp = inputs[i];" +
-            "    var a = ((inp.id||'')+(inp.name||'')+(inp.placeholder||'')).toLowerCase();" +
-            "    if(a.indexOf('badge')>=0||a.indexOf('nfc')>=0||a.indexOf('card')>=0||a.indexOf('scan')>=0) {" +
-            "      inp.value = uid;" +
-            "      inp.dispatchEvent(new Event('input',{bubbles:true}));" +
-            "      inp.dispatchEvent(new Event('change',{bubbles:true}));" +
-            "    }" +
-            "  }" +
-            // Show banner
-            "  var b = document.getElementById('pec-nfc-banner');" +
-            "  if(!b){b=document.createElement('div');b.id='pec-nfc-banner';" +
-            "    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#4CAF50;color:white;padding:14px;text-align:center;font-size:18px;font-weight:bold;';" +
-            "    document.body.appendChild(b);}" +
-            "  b.textContent='\\u2713 Badge: '+uid;" +
-            "  b.style.display='block';" +
-            "  setTimeout(function(){b.style.display='none';},8000);" +
-            "})();";
-
+        String js = "window.dispatchEvent(new CustomEvent('nfc-tag-discovered', " +
+                    "{detail:{tagId:'" + safeId + "'}}));";
         webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
