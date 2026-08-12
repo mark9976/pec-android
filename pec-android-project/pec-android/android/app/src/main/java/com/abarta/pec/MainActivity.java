@@ -34,36 +34,57 @@ public class MainActivity extends BridgeActivity {
     private Handler mainHandler;
 
     /**
-     * Web NFC polyfill — creates NDEFReader backed by native NFC events.
-     * Also patches navigator.permissions for NFC queries.
-     * Designed to be idempotent (safe to inject multiple times).
+     * NFC bridge injection script.
+     * Overrides PecAuth.readNfcBadge (what the CRAW PWA actually calls)
+     * to wait for native 'nfc-tag-discovered' events from Android.
+     * Also polyfills NDEFReader as a fallback.
+     * Idempotent — safe to inject multiple times.
      */
     private static final String NFC_POLYFILL_JS =
         "(function() {" +
-        "  if (window.__pecNfcPolyfillInstalled) return;" +
-        "  window.__pecNfcPolyfillInstalled = true;" +
-        "  class PecNDEFReader {" +
-        "    constructor() { this.onreading = null; this.onreadingerror = null; }" +
-        "    scan() {" +
-        "      var self = this;" +
-        "      window.addEventListener('nfc-tag-discovered', function handler(e) {" +
-        "        if (self.onreading) {" +
-        "          self.onreading({ serialNumber: e.detail.tagId, message: { records: [] } });" +
+        "  if (window.__pecNfcBridgeInstalled) return;" +
+        "  window.__pecNfcBridgeInstalled = true;" +
+        // Override PecAuth.readNfcBadge — this is what the CRAW PWA calls
+        "  function installPecAuthOverride() {" +
+        "    if (typeof PecAuth === 'undefined') return false;" +
+        "    PecAuth.readNfcBadge = function() {" +
+        "      return new Promise(function(resolve) {" +
+        "        var timeout = setTimeout(function() { cleanup(); resolve(null); }, 30000);" +
+        "        function handler(e) {" +
+        "          clearTimeout(timeout);" +
+        "          cleanup();" +
+        "          var uid = e.detail && e.detail.tagId ? e.detail.tagId : null;" +
+        "          console.log('[PEC-NFC] Badge read: ' + uid);" +
+        "          resolve(uid);" +
         "        }" +
+        "        function cleanup() { window.removeEventListener('nfc-tag-discovered', handler); }" +
+        "        window.addEventListener('nfc-tag-discovered', handler);" +
+        "        console.log('[PEC-NFC] Waiting for badge tap...');" +
+        "      });" +
+        "    };" +
+        "    console.log('[PEC-NFC] PecAuth.readNfcBadge overridden');" +
+        "    return true;" +
+        "  }" +
+        // Try immediately, then poll every 100ms until PecAuth exists
+        "  if (!installPecAuthOverride()) {" +
+        "    var iv = setInterval(function() {" +
+        "      if (installPecAuthOverride()) clearInterval(iv);" +
+        "    }, 100);" +
+        "    setTimeout(function() { clearInterval(iv); }, 15000);" +
+        "  }" +
+        // Also polyfill NDEFReader in case it's checked
+        "  if (!window.NDEFReader) {" +
+        "    window.NDEFReader = function() {};" +
+        "    window.NDEFReader.prototype.scan = function() {" +
+        "      var self = this;" +
+        "      window.addEventListener('nfc-tag-discovered', function(e) {" +
+        "        if (self.onreading) self.onreading({ serialNumber: e.detail.tagId, message: { records: [] } });" +
         "      });" +
         "      return Promise.resolve();" +
-        "    }" +
-        "  }" +
-        "  window.NDEFReader = PecNDEFReader;" +
-        "  if (navigator.permissions) {" +
-        "    var _origQuery = navigator.permissions.query.bind(navigator.permissions);" +
-        "    navigator.permissions.query = function(desc) {" +
-        "      if (desc && desc.name === 'nfc') return Promise.resolve({ state: 'granted', onchange: null });" +
-        "      return _origQuery(desc);" +
         "    };" +
         "  }" +
         "  window.PecNfcAvailable = true;" +
-        "  console.log('[PEC-NFC] Polyfill installed');" +
+        "  console.log('[PEC-NFC] Bridge script loaded');" +
         "})();";
 
     @Override
