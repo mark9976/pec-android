@@ -3,7 +3,8 @@
 	"appName": "Power Equipment Checkout",
 	"webDir": "www",
 	"server": {
-		"androidScheme": "https"
+		"androidScheme": "https",
+		"allowNavigation": ["biapps01.abarta.com"]
 	},
 	"plugins": {
 		"SplashScreen": {
@@ -19,6 +20,9 @@
 		"Camera": {
 			"promptLabelPhoto": "Take Photo",
 			"promptLabelPicture": "Choose from Gallery"
+		},
+		"CapacitorHttp": {
+			"enabled": true
 		}
 	},
 	"android": {

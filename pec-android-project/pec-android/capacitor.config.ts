@@ -6,8 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'www',
   server: {
     androidScheme: 'https',
-    // To point at a remote CRAW server instead of bundled assets, uncomment:
-    // url: 'https://your-craw-host/pec/handheld/',
+    // Allow the WebView to navigate to the CRAW server without opening external browser
+    allowNavigation: ['biapps01.abarta.com'],
   },
   plugins: {
     SplashScreen: {
@@ -23,6 +23,9 @@ const config: CapacitorConfig = {
     Camera: {
       promptLabelPhoto: 'Take Photo',
       promptLabelPicture: 'Choose from Gallery'
+    },
+    CapacitorHttp: {
+      enabled: true           // Route fetch() through native HTTP (bypasses CORS + uses system SSL trust)
     }
   },
   android: {
