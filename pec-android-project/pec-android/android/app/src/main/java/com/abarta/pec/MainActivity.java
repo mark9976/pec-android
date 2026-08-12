@@ -7,15 +7,21 @@ import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.Bundle;
 import android.util.Log;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import com.getcapacitor.BridgeActivity;
 
 /**
- * Main activity with NFC foreground dispatch.
+ * Main activity with NFC foreground dispatch and Web NFC polyfill injection.
  *
  * When an NFC tag is tapped while the app is in the foreground, Android
  * delivers the intent here. We extract the tag UID and push it into the
  * WebView via a JavaScript custom event so the web layer can handle it.
+ *
+ * We also inject a Web NFC (NDEFReader) polyfill into every page loaded
+ * in the WebView, so that the CRAW PWA's Web NFC code works transparently
+ * with Android's native NFC intents.
  */
 public class MainActivity extends BridgeActivity {
 
@@ -24,12 +30,43 @@ public class MainActivity extends BridgeActivity {
     private PendingIntent nfcPendingIntent;
     private IntentFilter[] nfcIntentFilters;
 
+    /** Web NFC polyfill — makes NDEFReader work via native nfc-tag-discovered events */
+    private static final String NFC_POLYFILL_JS =
+        "(function() {" +
+        "  if (window.__pecNfcPolyfillInstalled) return;" +
+        "  window.__pecNfcPolyfillInstalled = true;" +
+        "  window.NDEFReader = class NDEFReader {" +
+        "    constructor() { this.onreading = null; this.onreadingerror = null; }" +
+        "    async scan() {" +
+        "      this._listener = (e) => {" +
+        "        if (this.onreading) {" +
+        "          this.onreading({ serialNumber: e.detail.tagId, message: { records: [] } });" +
+        "        }" +
+        "      };" +
+        "      window.addEventListener('nfc-tag-discovered', this._listener);" +
+        "      return Promise.resolve();" +
+        "    }" +
+        "  };" +
+        "  console.log('[PEC] Web NFC polyfill installed');" +
+        "})();";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Register the custom NFC Capacitor plugin
         registerPlugin(PecNfcPlugin.class);
 
         super.onCreate(savedInstanceState);
+
+        // Inject NFC polyfill on every page load
+        WebView webView = getBridge().getWebView();
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                view.evaluateJavascript(NFC_POLYFILL_JS, null);
+                Log.i(TAG, "NFC polyfill injected for: " + url);
+            }
+        });
 
         // Set up NFC adapter
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
