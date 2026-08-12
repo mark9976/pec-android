@@ -79,25 +79,8 @@
       await PecNative.setServerUrl(url);
       await PecNative.setDeviceToken(token);
 
-      msg.textContent = 'Connecting to server...'; msg.className = 'info-msg';
-      try {
-        const testUrl = url + '/handheld/?token=' + encodeURIComponent(token);
-        const res = await fetch(testUrl);
-        if (res.ok) {
-          msg.textContent = 'Connected! Launching...'; msg.className = 'info-msg';
-          setTimeout(() => navigateToPwa(), 500);
-        } else if (res.status === 401 || res.status === 403) {
-          msg.textContent = 'Server reachable but token rejected (' + res.status + '). Check your device token.';
-          msg.className = 'error-msg';
-        } else {
-          msg.textContent = 'Saved. Server responded with ' + res.status + '. Launching anyway...';
-          msg.className = 'info-msg';
-          setTimeout(() => navigateToPwa(), 1000);
-        }
-      } catch(e) {
-        msg.textContent = 'Saved, but could not reach server: ' + e.message;
-        msg.className = 'error-msg';
-      }
+      msg.textContent = 'Launching...'; msg.className = 'info-msg';
+      setTimeout(() => navigateToPwa(), 300);
     };
 
     document.getElementById('btnTestConnection').onclick = async () => {
@@ -109,16 +92,12 @@
 
       msg.textContent = 'Testing...'; msg.className = 'info-msg';
       try {
+        // Use no-cors mode — we can't read the response, but if the request
+        // doesn't throw, the server is reachable. Full validation happens
+        // when we navigate to the PWA.
         const testUrl = url + '/handheld/?token=' + encodeURIComponent(token);
-        const res = await fetch(testUrl);
-        if (res.ok) {
-          msg.textContent = '✓ Connection successful!'; msg.className = 'info-msg';
-        } else if (res.status === 401 || res.status === 403) {
-          msg.textContent = 'Server reachable but token was rejected (' + res.status + '). Check your device token.';
-          msg.className = 'error-msg';
-        } else {
-          msg.textContent = 'Server responded with ' + res.status; msg.className = 'error-msg';
-        }
+        await fetch(testUrl, { mode: 'no-cors' });
+        msg.textContent = '✓ Server is reachable! Hit Save & Connect to launch.'; msg.className = 'info-msg';
       } catch(e) {
         msg.textContent = 'Connection failed: ' + e.message; msg.className = 'error-msg';
       }
