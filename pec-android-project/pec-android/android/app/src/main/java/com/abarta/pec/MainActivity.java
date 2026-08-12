@@ -16,9 +16,6 @@ import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
 
-import java.util.HashSet;
-import java.util.Set;
-
 /**
  * Main activity with NFC foreground dispatch.
  *
@@ -102,15 +99,7 @@ public class MainActivity extends BridgeActivity {
         // Expose native bridge via JavascriptInterface (persists across navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
 
-        // API 33+: inject at document start
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Set<String> origins = new HashSet<>();
-            origins.add("*");
-            webView.addDocumentStartJavaScript(NFC_SETUP_JS, origins);
-            Log.i(TAG, "addDocumentStartJavaScript registered");
-        }
-
-        // Retry injection
+        // Inject NFC setup with retries
         injectSetupWithRetries();
 
         // NFC adapter setup
@@ -133,7 +122,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         if (nfcAdapter != null && nfcAdapter.isEnabled()) {
             // Pass null, null = catch ALL NFC tags regardless of type/tech
@@ -148,7 +137,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         super.onPause();
         if (nfcAdapter != null) {
             nfcAdapter.disableForegroundDispatch(this);
@@ -156,7 +145,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onNewIntent(Intent intent) {
+    public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleNfcIntent(intent);
     }
