@@ -6,22 +6,20 @@ import android.content.IntentFilter;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 
 import com.getcapacitor.BridgeActivity;
 
 /**
- * Main activity with NFC foreground dispatch and Web NFC polyfill injection.
+ * Main activity with NFC foreground dispatch.
  *
- * When an NFC tag is tapped while the app is in the foreground, Android
- * delivers the intent here. We extract the tag UID and push it into the
- * WebView via a JavaScript custom event so the web layer can handle it.
- *
- * We also inject a Web NFC (NDEFReader) polyfill into every page loaded
- * in the WebView, so that the CRAW PWA's Web NFC code works transparently
- * with Android's native NFC intents.
+ * Uses addJavascriptInterface to expose a native NFC bridge to any page
+ * loaded in the WebView. Also injects a Web NFC (NDEFReader) polyfill
+ * that uses the native bridge, so the CRAW PWA works without modification.
  */
 public class MainActivity extends BridgeActivity {
 
@@ -29,44 +27,54 @@ public class MainActivity extends BridgeActivity {
     private NfcAdapter nfcAdapter;
     private PendingIntent nfcPendingIntent;
     private IntentFilter[] nfcIntentFilters;
+    private Handler mainHandler;
 
-    /** Web NFC polyfill — makes NDEFReader work via native nfc-tag-discovered events */
+    /**
+     * Web NFC polyfill — creates NDEFReader backed by native NFC events.
+     * Also patches navigator.permissions for NFC queries.
+     * Designed to be idempotent (safe to inject multiple times).
+     */
     private static final String NFC_POLYFILL_JS =
         "(function() {" +
         "  if (window.__pecNfcPolyfillInstalled) return;" +
         "  window.__pecNfcPolyfillInstalled = true;" +
-        "  window.NDEFReader = class NDEFReader {" +
+        "  class PecNDEFReader {" +
         "    constructor() { this.onreading = null; this.onreadingerror = null; }" +
-        "    async scan() {" +
-        "      this._listener = (e) => {" +
-        "        if (this.onreading) {" +
-        "          this.onreading({ serialNumber: e.detail.tagId, message: { records: [] } });" +
+        "    scan() {" +
+        "      var self = this;" +
+        "      window.addEventListener('nfc-tag-discovered', function handler(e) {" +
+        "        if (self.onreading) {" +
+        "          self.onreading({ serialNumber: e.detail.tagId, message: { records: [] } });" +
         "        }" +
-        "      };" +
-        "      window.addEventListener('nfc-tag-discovered', this._listener);" +
+        "      });" +
         "      return Promise.resolve();" +
         "    }" +
-        "  };" +
-        "  console.log('[PEC] Web NFC polyfill installed');" +
+        "  }" +
+        "  window.NDEFReader = PecNDEFReader;" +
+        "  if (navigator.permissions) {" +
+        "    var _origQuery = navigator.permissions.query.bind(navigator.permissions);" +
+        "    navigator.permissions.query = function(desc) {" +
+        "      if (desc && desc.name === 'nfc') return Promise.resolve({ state: 'granted', onchange: null });" +
+        "      return _origQuery(desc);" +
+        "    };" +
+        "  }" +
+        "  window.PecNfcAvailable = true;" +
+        "  console.log('[PEC-NFC] Polyfill installed');" +
         "})();";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Register the custom NFC Capacitor plugin
         registerPlugin(PecNfcPlugin.class);
-
         super.onCreate(savedInstanceState);
 
-        // Inject NFC polyfill on every page load
+        mainHandler = new Handler(Looper.getMainLooper());
         WebView webView = getBridge().getWebView();
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                view.evaluateJavascript(NFC_POLYFILL_JS, null);
-                Log.i(TAG, "NFC polyfill injected for: " + url);
-            }
-        });
+
+        // Expose native NFC bridge via JavascriptInterface (always available, survives navigation)
+        webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
+
+        // Inject polyfill with retries to ensure it's in place before user interaction
+        injectPolyfillWithRetries();
 
         // Set up NFC adapter
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
@@ -76,19 +84,16 @@ public class MainActivity extends BridgeActivity {
                 this, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE
             );
-
             nfcIntentFilters = new IntentFilter[] {
                 new IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED),
                 new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED),
                 new IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
             };
-
-            Log.i(TAG, "NFC adapter found and configured");
+            Log.i(TAG, "NFC adapter configured");
         } else {
-            Log.w(TAG, "No NFC adapter available on this device");
+            Log.w(TAG, "No NFC adapter on this device");
         }
 
-        // Handle NFC intent if the app was launched by tapping a tag
         handleNfcIntent(getIntent());
     }
 
@@ -98,6 +103,8 @@ public class MainActivity extends BridgeActivity {
         if (nfcAdapter != null) {
             nfcAdapter.enableForegroundDispatch(this, nfcPendingIntent, nfcIntentFilters, null);
         }
+        // Re-inject polyfill when app comes back to foreground (page may have reloaded)
+        injectPolyfillWithRetries();
     }
 
     @Override
@@ -114,42 +121,53 @@ public class MainActivity extends BridgeActivity {
         handleNfcIntent(intent);
     }
 
-    /**
-     * Extract the tag UID from an NFC intent and dispatch it to the WebView.
-     */
     private void handleNfcIntent(Intent intent) {
         if (intent == null) return;
-
         String action = intent.getAction();
         if (NfcAdapter.ACTION_TAG_DISCOVERED.equals(action) ||
             NfcAdapter.ACTION_NDEF_DISCOVERED.equals(action) ||
             NfcAdapter.ACTION_TECH_DISCOVERED.equals(action)) {
-
             Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
             if (tag != null) {
                 String uid = bytesToHex(tag.getId());
-                Log.i(TAG, "NFC tag detected, UID: " + uid);
+                Log.i(TAG, "Tag UID: " + uid);
                 dispatchTagToWebView(uid);
             }
         }
     }
 
     /**
-     * Send the tag UID to the WebView via a custom DOM event.
-     * The nfc-native.js module listens for 'nfc-tag-discovered'.
+     * Inject polyfill then dispatch the NFC tag event to the WebView.
      */
     private void dispatchTagToWebView(String tagId) {
-        String js = "window.dispatchEvent(new CustomEvent('nfc-tag-discovered', " +
-                    "{ detail: { tagId: '" + tagId + "' } }));";
-        getBridge().getWebView().post(() ->
-            getBridge().getWebView().evaluateJavascript(js, null)
-        );
+        WebView webView = getBridge().getWebView();
+        // Ensure polyfill is present, then fire the event
+        String js = NFC_POLYFILL_JS +
+            "window.dispatchEvent(new CustomEvent('nfc-tag-discovered', " +
+            "{ detail: { tagId: '" + tagId + "' } }));";
+        webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
     /**
-     * Convert raw tag ID bytes to colon-separated uppercase hex.
-     * e.g. {0x04, 0x33, 0x15} → "04:33:15"
+     * Inject the polyfill multiple times with delays to cover page load timing.
      */
+    private void injectPolyfillWithRetries() {
+        WebView webView = getBridge().getWebView();
+        // Inject immediately, then again at 500ms, 1.5s, and 3s to cover page loads
+        webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null));
+        mainHandler.postDelayed(() ->
+            webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), 500);
+        mainHandler.postDelayed(() ->
+            webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), 1500);
+        mainHandler.postDelayed(() ->
+            webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), 3000);
+    }
+
+    private void injectNfcPolyfill() {
+        WebView webView = getBridge().getWebView();
+        webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null));
+    }
+
     private static String bytesToHex(byte[] bytes) {
         if (bytes == null || bytes.length == 0) return "";
         StringBuilder sb = new StringBuilder();
@@ -158,5 +176,21 @@ public class MainActivity extends BridgeActivity {
             sb.append(String.format("%02X", bytes[i]));
         }
         return sb.toString();
+    }
+
+    /**
+     * Native NFC bridge exposed to JavaScript via addJavascriptInterface.
+     * Available as window.PecNfcNative in any page loaded in the WebView.
+     */
+    public class NfcJsBridge {
+        @JavascriptInterface
+        public boolean isAvailable() {
+            return nfcAdapter != null;
+        }
+
+        @JavascriptInterface
+        public boolean isEnabled() {
+            return nfcAdapter != null && nfcAdapter.isEnabled();
+        }
     }
 }

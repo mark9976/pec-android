@@ -46,7 +46,8 @@
   // SCREEN: Settings (Server URL + Device Token)
   // ═══════════════════════════════════════════════════════════
   function showSettingsScreen(isFirstRun) {
-    const currentUrl = PecNative.getServerUrl();
+    const DEFAULT_SERVER_URL = 'https://biapps01.abarta.com:8443/pec';
+    const currentUrl = PecNative.getServerUrl() || DEFAULT_SERVER_URL;
     const currentToken = PecNative.getDeviceToken();
     root.innerHTML = `
       <div class="screen active settings-screen">
