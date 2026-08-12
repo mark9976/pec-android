@@ -31,6 +31,7 @@ import java.util.Set;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "PEC-NFC";
+    private static final String BUILD_VERSION = "2026.08.12-B";
     private NfcAdapter nfcAdapter;
     private PendingIntent nfcPendingIntent;
     private Handler mainHandler;
@@ -244,13 +245,27 @@ public class MainActivity extends BridgeActivity {
 
     private void injectSetupWithRetries() {
         if (webView == null) return;
+        // Inject version badge + NFC setup at multiple intervals
+        String versionJs =
+            "(function() {" +
+            "  if (document.getElementById('pec-version-badge')) return;" +
+            "  var v = document.createElement('div');" +
+            "  v.id = 'pec-version-badge';" +
+            "  v.style.cssText = 'position:fixed;bottom:4px;right:4px;z-index:99999;" +
+            "    background:rgba(0,0,0,0.7);color:#0f0;padding:4px 8px;font-size:11px;" +
+            "    border-radius:4px;font-family:monospace;pointer-events:none;';" +
+            "  v.textContent = 'PEC " + BUILD_VERSION + "';" +
+            "  document.body.appendChild(v);" +
+            "})();";
+        String combined = NFC_SETUP_JS + versionJs;
+
         int[] delays = {0, 500, 1500, 3000, 5000, 8000};
         for (int delay : delays) {
             if (delay == 0) {
-                webView.post(() -> webView.evaluateJavascript(NFC_SETUP_JS, null));
+                webView.post(() -> webView.evaluateJavascript(combined, null));
             } else {
                 mainHandler.postDelayed(() ->
-                    webView.post(() -> webView.evaluateJavascript(NFC_SETUP_JS, null)), delay);
+                    webView.post(() -> webView.evaluateJavascript(combined, null)), delay);
             }
         }
     }
