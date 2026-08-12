@@ -1,20 +1,23 @@
 /**
  * Capacitor Bridge — provides native Android APIs to the PEC app.
- * Manages: API base URL storage, native camera, platform detection.
+ * Manages: server URL storage, device token, native camera, platform detection.
+ *
+ * The app loads the remote CRAW PWA at /pec/handheld/ in the WebView.
+ * This bridge handles first-run configuration and native feature access.
  */
 const PecNative = (function() {
   'use strict';
 
   const isNative = (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform());
-  let _apiBase = '';
+  let _serverUrl = '';   // e.g. https://biapps01.abarta.com:8443/pec
   let _deviceToken = '';
 
   async function init() {
     if (isNative) {
       try {
         const { Preferences } = Capacitor.Plugins;
-        const baseRes = await Preferences.get({ key: 'api_base_url' });
-        if (baseRes.value) _apiBase = baseRes.value;
+        const urlRes = await Preferences.get({ key: 'server_url' });
+        if (urlRes.value) _serverUrl = urlRes.value;
         const tokenRes = await Preferences.get({ key: 'device_token' });
         if (tokenRes.value) _deviceToken = tokenRes.value;
       } catch(e) {
@@ -26,22 +29,28 @@ const PecNative = (function() {
         const { StatusBar } = Capacitor.Plugins;
         if (StatusBar) {
           StatusBar.setBackgroundColor({ color: '#1e3a5f' });
-          StatusBar.setStyle({ style: 'DARK' }); // light text
+          StatusBar.setStyle({ style: 'DARK' });
         }
       } catch(e) {}
     }
-    console.log('[PecNative] isNative:', isNative, 'apiBase:', _apiBase || '(not configured)');
+    console.log('[PecNative] isNative:', isNative, 'serverUrl:', _serverUrl || '(not configured)');
   }
 
-  function isConfigured() { return !!_apiBase; }
-  function getApiBase() { return _apiBase; }
+  function isConfigured() { return !!_serverUrl && !!_deviceToken; }
+  function getServerUrl() { return _serverUrl; }
   function getDeviceToken() { return _deviceToken; }
   function isNativeApp() { return isNative; }
 
-  async function setApiBase(url) {
-    _apiBase = url.replace(/\/+$/, ''); // strip trailing slash
+  /** Build the full handheld PWA URL with token for first auth */
+  function getHandheldUrl() {
+    const base = _serverUrl.replace(/\/+$/, '');
+    return base + '/handheld/?token=' + encodeURIComponent(_deviceToken);
+  }
+
+  async function setServerUrl(url) {
+    _serverUrl = url.replace(/\/+$/, '');
     if (isNative) {
-      await Capacitor.Plugins.Preferences.set({ key: 'api_base_url', value: _apiBase });
+      await Capacitor.Plugins.Preferences.set({ key: 'server_url', value: _serverUrl });
     }
   }
 
@@ -75,8 +84,8 @@ const PecNative = (function() {
         return null;
       }
     }
-    return null; // Fallback to HTML file input in app.js
+    return null;
   }
 
-  return { init, isConfigured, getApiBase, setApiBase, getDeviceToken, setDeviceToken, takePhoto, isNativeApp };
+  return { init, isConfigured, getServerUrl, setServerUrl, getDeviceToken, setDeviceToken, getHandheldUrl, takePhoto, isNativeApp };
 })();
