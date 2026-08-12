@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,6 +14,9 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Main activity with NFC foreground dispatch.
@@ -73,7 +77,15 @@ public class MainActivity extends BridgeActivity {
         // Expose native NFC bridge via JavascriptInterface (always available, survives navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
 
-        // Inject polyfill with retries to ensure it's in place before user interaction
+        // API 33+: inject polyfill at document start (before ANY page JS runs)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Set<String> origins = new HashSet<>();
+            origins.add("*");
+            webView.addDocumentStartJavaScript(NFC_POLYFILL_JS, origins);
+            Log.i(TAG, "Using addDocumentStartJavaScript for early NFC polyfill");
+        }
+
+        // Also inject with retries as fallback (covers API <33 and initial page)
         injectPolyfillWithRetries();
 
         // Set up NFC adapter
@@ -150,17 +162,20 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * Inject the polyfill multiple times with delays to cover page load timing.
+     * On API 33+ addDocumentStartJavaScript handles it, but this is a fallback.
      */
     private void injectPolyfillWithRetries() {
         WebView webView = getBridge().getWebView();
-        // Inject immediately, then again at 500ms, 1.5s, and 3s to cover page loads
-        webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null));
-        mainHandler.postDelayed(() ->
-            webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), 500);
-        mainHandler.postDelayed(() ->
-            webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), 1500);
-        mainHandler.postDelayed(() ->
-            webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), 3000);
+        // Inject at multiple intervals to cover various page load timings
+        int[] delays = {0, 250, 500, 1000, 1500, 2500, 4000, 6000};
+        for (int delay : delays) {
+            if (delay == 0) {
+                webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null));
+            } else {
+                mainHandler.postDelayed(() ->
+                    webView.post(() -> webView.evaluateJavascript(NFC_POLYFILL_JS, null)), delay);
+            }
+        }
     }
 
     private void injectNfcPolyfill() {
