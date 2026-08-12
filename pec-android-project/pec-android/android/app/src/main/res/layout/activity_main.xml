@@ -10,34 +10,19 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- HUGE TEST BUTTON - if you can see this, build is current -->
-    <Button
-        android:id="@+id/testButton"
-        android:layout_width="match_parent"
-        android:layout_height="80dp"
-        android:layout_gravity="top"
-        android:layout_marginTop="40dp"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        android:text="✓ BUILD 2026.08.12-C ✓"
-        android:textSize="22sp"
-        android:textColor="#FFFFFF"
-        android:background="#FF0000"
-        android:elevation="20dp" />
-
-    <!-- Version badge - native Android, always visible -->
+    <!-- Version badge -->
     <TextView
         android:id="@+id/versionBadge"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:text="PEC 2026.08.12-C"
+        android:text="PEC 2026.08.12-D"
         android:textColor="#00FF00"
-        android:textSize="12sp"
+        android:textSize="10sp"
         android:fontFamily="monospace"
-        android:background="#CC000000"
-        android:padding="6dp"
-        android:layout_margin="8dp"
+        android:background="#99000000"
+        android:padding="4dp"
+        android:layout_margin="4dp"
         android:elevation="10dp" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

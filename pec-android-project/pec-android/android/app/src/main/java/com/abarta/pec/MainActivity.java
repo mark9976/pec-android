@@ -1,6 +1,5 @@
 package com.abarta.pec;
 
-import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.nfc.NfcAdapter;
@@ -19,20 +18,17 @@ import com.getcapacitor.BridgeActivity;
 /**
  * Main activity with NFC foreground dispatch.
  *
- * Reads NFC badges natively. When a badge is tapped:
- * 1. Shows an AlertDialog with the badge UID (impossible to miss)
- * 2. Stores the WebView reference directly (not via getBridge() which may
- *    stop working after external navigation)
- * 3. Injects the badge ID into the page via multiple mechanisms
+ * Reads NFC badges natively and delivers the UID to the WebView
+ * via JavaScript injection (custom events + PecAuth override).
  */
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "PEC-NFC";
-    private static final String BUILD_VERSION = "2026.08.12-B";
+    private static final String BUILD_VERSION = "2026.08.12-D";
     private NfcAdapter nfcAdapter;
     private PendingIntent nfcPendingIntent;
     private Handler mainHandler;
-    private WebView webView; // Stored directly — getBridge() may fail after external nav
+    private WebView webView;
     private String lastScannedBadge = null;
 
     /**
@@ -112,10 +108,9 @@ public class MainActivity extends BridgeActivity {
                 flags |= PendingIntent.FLAG_MUTABLE;
             }
             nfcPendingIntent = PendingIntent.getActivity(this, 0, intent, flags);
-            Log.i(TAG, "NFC adapter configured, enabled=" + nfcAdapter.isEnabled());
+            Log.i(TAG, "NFC adapter ready");
         } else {
             Log.w(TAG, "No NFC adapter on this device");
-            runOnUiThread(() -> Toast.makeText(this, "ERROR: No NFC hardware found", Toast.LENGTH_LONG).show());
         }
 
         handleNfcIntent(getIntent());
@@ -125,13 +120,10 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         if (nfcAdapter != null && nfcAdapter.isEnabled()) {
-            // Pass null, null = catch ALL NFC tags regardless of type/tech
             nfcAdapter.enableForegroundDispatch(this, nfcPendingIntent, null, null);
-            Toast.makeText(this, "NFC Ready - tap badge to phone", Toast.LENGTH_SHORT).show();
             Log.i(TAG, "Foreground dispatch enabled");
         } else if (nfcAdapter != null && !nfcAdapter.isEnabled()) {
-            Toast.makeText(this, "NFC is DISABLED - turn it on in Settings", Toast.LENGTH_LONG).show();
-            Log.w(TAG, "NFC adapter exists but is disabled");
+            Toast.makeText(this, "NFC is disabled - enable in Settings", Toast.LENGTH_LONG).show();
         }
         injectSetupWithRetries();
     }
@@ -167,24 +159,10 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Called when a badge is successfully scanned natively.
-     * Shows AlertDialog + Toast, delivers to WebView.
+     * Called when a badge is successfully scanned.
      */
     private void onBadgeScanned(String uid) {
-        runOnUiThread(() -> {
-            // Toast (quick feedback)
-            Toast.makeText(this, "Badge: " + uid, Toast.LENGTH_LONG).show();
-
-            // AlertDialog (impossible to miss — confirms NFC works)
-            new AlertDialog.Builder(this)
-                .setTitle("Badge Scanned")
-                .setMessage("UID: " + uid)
-                .setPositiveButton("OK", null)
-                .show();
-
-            // Deliver to WebView
-            deliverBadgeToWebView(uid);
-        });
+        runOnUiThread(() -> deliverBadgeToWebView(uid));
     }
 
     /**
