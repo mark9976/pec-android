@@ -3,7 +3,6 @@ package com.abarta.pec;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.Build;
@@ -34,7 +33,6 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "PEC-NFC";
     private NfcAdapter nfcAdapter;
     private PendingIntent nfcPendingIntent;
-    private IntentFilter[] nfcIntentFilters;
     private Handler mainHandler;
     private WebView webView; // Stored directly — getBridge() may fail after external nav
     private String lastScannedBadge = null;
@@ -118,18 +116,16 @@ public class MainActivity extends BridgeActivity {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
         if (nfcAdapter != null) {
             Intent intent = new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            nfcPendingIntent = PendingIntent.getActivity(
-                this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE
-            );
-            nfcIntentFilters = new IntentFilter[] {
-                new IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED),
-                new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED),
-                new IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
-            };
-            Log.i(TAG, "NFC adapter configured");
+            // FLAG_MUTABLE required on API 31+, must not be used on older
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                flags |= PendingIntent.FLAG_MUTABLE;
+            }
+            nfcPendingIntent = PendingIntent.getActivity(this, 0, intent, flags);
+            Log.i(TAG, "NFC adapter configured, enabled=" + nfcAdapter.isEnabled());
         } else {
             Log.w(TAG, "No NFC adapter on this device");
+            runOnUiThread(() -> Toast.makeText(this, "ERROR: No NFC hardware found", Toast.LENGTH_LONG).show());
         }
 
         handleNfcIntent(getIntent());
@@ -138,8 +134,14 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (nfcAdapter != null) {
-            nfcAdapter.enableForegroundDispatch(this, nfcPendingIntent, nfcIntentFilters, null);
+        if (nfcAdapter != null && nfcAdapter.isEnabled()) {
+            // Pass null, null = catch ALL NFC tags regardless of type/tech
+            nfcAdapter.enableForegroundDispatch(this, nfcPendingIntent, null, null);
+            Toast.makeText(this, "NFC Ready - tap badge to phone", Toast.LENGTH_SHORT).show();
+            Log.i(TAG, "Foreground dispatch enabled");
+        } else if (nfcAdapter != null && !nfcAdapter.isEnabled()) {
+            Toast.makeText(this, "NFC is DISABLED - turn it on in Settings", Toast.LENGTH_LONG).show();
+            Log.w(TAG, "NFC adapter exists but is disabled");
         }
         injectSetupWithRetries();
     }
