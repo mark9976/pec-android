@@ -184,34 +184,36 @@ public class MainActivity extends BridgeActivity {
         "      }" +
         "    });" +
 
-        // ── 3. Manage Equipment: barcode scan → popup for 2D barcode entry ──
+// ── 3. Manage Equipment: barcode scan → popup for 2D barcode entry ──
+        // Clone buttons to strip original NFC handlers, then attach barcode popup
         "    document.querySelectorAll('.equip-scan-btn, [data-action=\"scan-equip-barcode\"]').forEach(function(btn){" +
         "      if(btn.dataset.barcodePopup) return;" +
-        "      btn.dataset.barcodePopup='1';" +
-        "      btn.addEventListener('click', function(e){" +
+        "      var clone = btn.cloneNode(true);" +
+        "      clone.dataset.barcodePopup='1';" +
+        "      clone.addEventListener('click', function(e){" +
         "        e.stopPropagation(); e.preventDefault();" +
         "        showBarcodePopup(function(val){" +
-        // Dispatch the same event/callback the original scan would
         "          if(val){" +
         "            var ev = new CustomEvent('barcode-scanned',{detail:{barcode:val}});" +
         "            window.dispatchEvent(ev);" +
-        // Also try to set any visible scan input
         "            var inp = document.querySelector('.scan-input');" +
         "            if(inp){ inp.value=val; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.dispatchEvent(new Event('change',{bubbles:true})); }" +
         "          }" +
         "        });" +
-        "      }, true);" +
+        "      });" +
+        "      btn.parentNode.replaceChild(clone, btn);" +
         "    });" +
-        // Also intercept NFC scan buttons that say 'Scan Barcode' on equipment screens
+        // Also intercept big buttons that say 'Scan Barcode' on equipment screens
         "    document.querySelectorAll('.big-btn').forEach(function(btn){" +
         "      var txt=(btn.textContent||'').toLowerCase();" +
         "      if((txt.indexOf('scan barcode')>=0 || txt.indexOf('scan equipment')>=0) && !btn.dataset.barcodePopup){" +
-        // Only on equipment management screens, not checkout
         "        var screen = btn.closest('.screen,.manage-equip-screen');" +
         "        if(screen && (screen.classList.contains('manage-equip-screen') || " +
         "            (screen.querySelector('.equip-card') || screen.querySelector('[data-action=\"add-equipment\"]')))){" +
-        "          btn.dataset.barcodePopup='1';" +
-        "          btn.addEventListener('click', function(e){" +
+        "          var clone2 = btn.cloneNode(true);" +
+        "          clone2.dataset.barcodePopup='1';" +
+        "          clone2.textContent='Scan Equipment Barcode';" +
+        "          clone2.addEventListener('click', function(e){" +
         "            e.stopPropagation(); e.preventDefault();" +
         "            showBarcodePopup(function(val){" +
         "              if(val){" +
@@ -220,7 +222,8 @@ public class MainActivity extends BridgeActivity {
         "                window.dispatchEvent(new CustomEvent('barcode-scanned',{detail:{barcode:val}}));" +
         "              }" +
         "            });" +
-        "          }, true);" +
+        "          });" +
+        "          btn.parentNode.replaceChild(clone2, btn);" +
         "        }" +
         "      }" +
         "    });" +
