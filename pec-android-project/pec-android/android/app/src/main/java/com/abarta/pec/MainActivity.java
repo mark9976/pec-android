@@ -93,12 +93,15 @@ public class MainActivity extends BridgeActivity {
         // ── Inject CSS overrides ──
         "  var sty = document.createElement('style');" +
         "  sty.textContent = '" +
-        // 1. Bigger PIN keys
-        "    .pin-pad { max-width:340px; gap:.6rem; }" +
-        "    .pin-key { padding:1.3rem; font-size:1.6rem; min-height:64px; }" +
-        // Move OK button full-width below the grid
-        "    .pin-ok-row { display:flex; justify-content:center; margin-top:.6rem; max-width:340px; margin-left:auto; margin-right:auto; }" +
-        "    .pin-ok-row .pin-key { flex:1; font-size:1.3rem; }" +
+        // 1. Bigger PIN keys, reduce surrounding space so pad fits without scrolling
+        "    .pin-display { margin:.5rem 0; min-height:2rem; }" +
+        "    .login-box { padding:.5rem .5rem; }" +
+        "    .login-box h2 { margin-bottom:.5rem; font-size:1rem; }" +
+        "    .pin-pad { max-width:100%; gap:.5rem; }" +
+        "    .pin-key { padding:1.4rem .5rem; font-size:1.8rem; min-height:72px; }" +
+        // OK + Back row below the grid, equal width
+        "    .pin-bottom-row { display:flex; gap:.5rem; margin-top:.5rem; }" +
+        "    .pin-bottom-row .pin-key { flex:1; font-size:1.3rem; min-height:56px; padding:1rem; }" +
         // Barcode popup overlay
         "    .pec-barcode-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center; }" +
         "    .pec-barcode-popup { background:#fff;border-radius:12px;padding:1.5rem;width:90%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.3); }" +
@@ -118,25 +121,23 @@ public class MainActivity extends BridgeActivity {
 
         "  function pecTweakAll() {" +
 
-        // ── 1. PIN pad: bigger buttons + move check to OK row below ──
+        // ── 1. PIN pad: bigger buttons, move Back + OK below the number grid ──
         "    document.querySelectorAll('.pin-pad').forEach(function(pad){" +
         "      if(pad.dataset.tweaked) return;" +
         "      pad.dataset.tweaked='1';" +
-        // Find the check/submit key (✓ or similar action key)
-        "      var actionKeys = pad.querySelectorAll('.pin-key.action');" +
-        "      actionKeys.forEach(function(k){" +
-        "        if(k.textContent.trim()==='✓' || k.textContent.trim()==='OK'){" +
-        // Remove it from the grid
-        "          k.parentNode.removeChild(k);" +
-        // Rename to OK
-        "          k.textContent='OK';" +
-        // Create a row below the pad
-        "          var row = document.createElement('div');" +
-        "          row.className='pin-ok-row';" +
-        "          row.appendChild(k);" +
-        "          pad.parentNode.insertBefore(row, pad.nextSibling);" +
-        "        }" +
+        // Find Back (danger class, ⌫) and OK (action class, ✓) keys
+        "      var backKey=null, okKey=null;" +
+        "      pad.querySelectorAll('.pin-key').forEach(function(k){" +
+        "        var t=k.textContent.trim();" +
+        "        if(k.classList.contains('danger') || t==='⌫' || t==='←' || t.toLowerCase()==='back') backKey=k;" +
+        "        if(k.classList.contains('action') || t==='✓' || t==='OK') okKey=k;" +
         "      });" +
+        // Remove both from the grid and place in a row below
+        "      var row = document.createElement('div');" +
+        "      row.className='pin-bottom-row';" +
+        "      if(backKey){ backKey.parentNode.removeChild(backKey); row.appendChild(backKey); }" +
+        "      if(okKey){ okKey.parentNode.removeChild(okKey); okKey.textContent='OK'; row.appendChild(okKey); }" +
+        "      pad.parentNode.insertBefore(row, pad.nextSibling);" +
         "    });" +
 
         // ── 2. Manage Equipment: show who locked the equipment ──

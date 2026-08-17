@@ -33,8 +33,8 @@ body {
 .screen.active { display: flex; }
 
 /* Login */
-.login-box { text-align: center; padding: 2rem 1rem; }
-.login-box h2 { margin-bottom: 1.5rem; font-size: 1.2rem; }
+.login-box { text-align: center; padding: .5rem .5rem; }
+.login-box h2 { margin-bottom: .5rem; font-size: 1rem; }
 .big-btn {
   display: block; width: 100%; padding: 1rem; margin: .5rem 0;
   border: 2px solid #1e3a5f; border-radius: 8px; background: #fff;
@@ -45,10 +45,10 @@ body {
 .big-btn.primary { background: #1e3a5f; color: #fff; }
 
 /* PIN pad */
-.pin-display { text-align: center; font-size: 2rem; letter-spacing: .5rem; min-height: 2.5rem; margin: 1rem 0; }
-.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; max-width: 340px; margin: 0 auto; }
+.pin-display { text-align: center; font-size: 2rem; letter-spacing: .5rem; min-height: 2rem; margin: .5rem 0; }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; max-width: 100%; margin: 0 auto; }
 .pin-key {
-  padding: 1.3rem; font-size: 1.6rem; font-weight: 700; min-height: 64px;
+  padding: 1.4rem .5rem; font-size: 1.8rem; font-weight: 700; min-height: 72px;
   border: 1px solid #ddd; border-radius: 8px; background: #fff;
   cursor: pointer; text-align: center;
   -webkit-tap-highlight-color: transparent;
@@ -56,8 +56,8 @@ body {
 .pin-key:active { background: #e2e8f0; }
 .pin-key.action { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
 .pin-key.danger { background: #d12421; color: #fff; border-color: #d12421; }
-.pin-ok-row { display: flex; justify-content: center; margin-top: .6rem; max-width: 340px; margin-left: auto; margin-right: auto; }
-.pin-ok-row .pin-key { flex: 1; font-size: 1.3rem; }
+.pin-bottom-row { display: flex; gap: .5rem; margin-top: .5rem; }
+.pin-bottom-row .pin-key { flex: 1; font-size: 1.3rem; min-height: 56px; padding: 1rem; }
 
 /* Scan input */
 .scan-section { text-align: center; padding: 1.5rem; }
