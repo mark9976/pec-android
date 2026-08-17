@@ -101,7 +101,8 @@ public class MainActivity extends BridgeActivity {
         "    #appRoot { padding:.25rem !important; }" +
         "    .hh-header { padding:.3rem .5rem !important; }" +
         "    .pin-pad { max-width:100% !important; gap:.3rem !important; margin:0 !important; }" +
-        "    .pin-key { padding:.9rem .5rem !important; font-size:1.7rem !important; min-height:52px !important; }" +
+        "    .pin-key { padding:1.2rem 1rem !important; font-size:1.7rem !important; min-height:64px !important; width:100% !important; }" +
+        //"    .pin-key { padding:.9rem .5rem !important; font-size:1.7rem !important; min-height:52px !important; }" +
         // Back + OK row below the grid, equal width
         "    .pin-bottom-row { display:flex; gap:.3rem; margin-top:.3rem; }" +
         "    .pin-bottom-row .pin-key { flex:1; font-size:1.2rem !important; min-height:44px !important; padding:.7rem !important; }" +
