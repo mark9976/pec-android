@@ -93,15 +93,16 @@ public class MainActivity extends BridgeActivity {
         // ── Inject CSS overrides ──
         "  var sty = document.createElement('style');" +
         "  sty.textContent = '" +
-        // 1. Bigger PIN keys, reduce surrounding space so pad fits without scrolling
-        "    .pin-display { margin:.5rem 0; min-height:2rem; }" +
-        "    .login-box { padding:.5rem .5rem; }" +
-        "    .login-box h2 { margin-bottom:.5rem; font-size:1rem; }" +
-        "    .pin-pad { max-width:100%; gap:.5rem; }" +
-        "    .pin-key { padding:1.4rem .5rem; font-size:1.8rem; min-height:72px; }" +
-        // OK + Back row below the grid, equal width
-        "    .pin-bottom-row { display:flex; gap:.5rem; margin-top:.5rem; }" +
-        "    .pin-bottom-row .pin-key { flex:1; font-size:1.3rem; min-height:56px; padding:1rem; }" +
+        // 1. Bigger PIN keys, full width, minimal margins to fit on screen
+        "    .pin-display { margin:.3rem 0; min-height:1.8rem; font-size:1.8rem; }" +
+        "    .login-box { padding:.3rem 0; }" +
+        "    .login-box h2 { margin-bottom:.3rem; font-size:.95rem; }" +
+        "    .screen.active { padding:0 .25rem; }" +
+        "    .pin-pad { max-width:100%; gap:.4rem; margin:0; }" +
+        "    .pin-key { padding:1.2rem .5rem; font-size:1.8rem; min-height:62px; }" +
+        // Back + OK row below the grid, equal width
+        "    .pin-bottom-row { display:flex; gap:.4rem; margin-top:.4rem; }" +
+        "    .pin-bottom-row .pin-key { flex:1; font-size:1.3rem; min-height:50px; padding:.8rem; }" +
         // Barcode popup overlay
         "    .pec-barcode-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center; }" +
         "    .pec-barcode-popup { background:#fff;border-radius:12px;padding:1.5rem;width:90%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.3); }" +
