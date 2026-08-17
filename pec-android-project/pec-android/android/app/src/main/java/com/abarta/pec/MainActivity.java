@@ -93,16 +93,18 @@ public class MainActivity extends BridgeActivity {
         // ── Inject CSS overrides ──
         "  var sty = document.createElement('style');" +
         "  sty.textContent = '" +
-        // 1. Bigger PIN keys, full width, minimal margins to fit on screen
-        "    .pin-display { margin:.3rem 0; min-height:1.8rem; font-size:1.8rem; }" +
-        "    .login-box { padding:.3rem 0; }" +
-        "    .login-box h2 { margin-bottom:.3rem; font-size:.95rem; }" +
-        "    .screen.active { padding:0 .25rem; }" +
-        "    .pin-pad { max-width:100%; gap:.4rem; margin:0; }" +
-        "    .pin-key { padding:1.2rem .5rem; font-size:1.8rem; min-height:62px; }" +
+        // 1. PIN pad: full-width, compact vertical spacing for small Honeywell screens
+        "    .pin-display { margin:.2rem 0; min-height:1.5rem; font-size:1.6rem; letter-spacing:.3rem; }" +
+        "    .login-box { padding:0 !important; }" +
+        "    .login-box h2 { margin-bottom:.2rem !important; font-size:.85rem !important; }" +
+        "    .login-box p, .login-box .subtitle { margin-bottom:.1rem !important; font-size:.8rem !important; }" +
+        "    #appRoot { padding:.25rem !important; }" +
+        "    .hh-header { padding:.3rem .5rem !important; }" +
+        "    .pin-pad { max-width:100% !important; gap:.3rem !important; margin:0 !important; }" +
+        "    .pin-key { padding:.9rem .5rem !important; font-size:1.7rem !important; min-height:52px !important; }" +
         // Back + OK row below the grid, equal width
-        "    .pin-bottom-row { display:flex; gap:.4rem; margin-top:.4rem; }" +
-        "    .pin-bottom-row .pin-key { flex:1; font-size:1.3rem; min-height:50px; padding:.8rem; }" +
+        "    .pin-bottom-row { display:flex; gap:.3rem; margin-top:.3rem; }" +
+        "    .pin-bottom-row .pin-key { flex:1; font-size:1.2rem !important; min-height:44px !important; padding:.7rem !important; }" +
         // Barcode popup overlay
         "    .pec-barcode-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center; }" +
         "    .pec-barcode-popup { background:#fff;border-radius:12px;padding:1.5rem;width:90%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.3); }" +
