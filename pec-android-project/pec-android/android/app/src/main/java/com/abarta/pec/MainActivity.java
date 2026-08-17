@@ -24,7 +24,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "PEC-NFC";
-    private static final String BUILD_VERSION = "2026.08.12-E";
+    private static final String BUILD_VERSION = "2026.08.17-F";
     private NfcAdapter nfcAdapter;
     private PendingIntent nfcPendingIntent;
     private Handler mainHandler;
@@ -75,6 +75,189 @@ public class MainActivity extends BridgeActivity {
         "    };" +
         "  }" +
         "  window.PecNfcAvailable = true;" +
+        "})();";
+
+    /**
+     * UI customisation script injected into the remote PWA.
+     *
+     * 1. PIN pad: bigger buttons, move ✓ (check) below the pad and rename to "OK"
+     * 2. Manage Equipment: show who locked equipment (lockedByName)
+     * 3. Manage Equipment: barcode scan opens a text-entry popup instead of NFC
+     * 4. Checkout screen: auto-focus the barcode input field
+     */
+    private static final String UI_TWEAKS_JS =
+        "(function(){" +
+        "  if(window.__pecUiTweaks) return;" +
+        "  window.__pecUiTweaks = true;" +
+
+        // ── Inject CSS overrides ──
+        "  var sty = document.createElement('style');" +
+        "  sty.textContent = '" +
+        // 1. Bigger PIN keys
+        "    .pin-pad { max-width:340px; gap:.6rem; }" +
+        "    .pin-key { padding:1.3rem; font-size:1.6rem; min-height:64px; }" +
+        // Move OK button full-width below the grid
+        "    .pin-ok-row { display:flex; justify-content:center; margin-top:.6rem; max-width:340px; margin-left:auto; margin-right:auto; }" +
+        "    .pin-ok-row .pin-key { flex:1; font-size:1.3rem; }" +
+        // Barcode popup overlay
+        "    .pec-barcode-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center; }" +
+        "    .pec-barcode-popup { background:#fff;border-radius:12px;padding:1.5rem;width:90%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.3); }" +
+        "    .pec-barcode-popup h3 { margin:0 0 1rem;text-align:center;font-size:1.1rem; }" +
+        "    .pec-barcode-popup input { width:100%;padding:.8rem;font-size:1.2rem;text-align:center;border:2px solid #1e3a5f;border-radius:8px;margin-bottom:.75rem; }" +
+        "    .pec-barcode-popup .popup-btns { display:flex;gap:.5rem; }" +
+        "    .pec-barcode-popup .popup-btns button { flex:1;padding:.8rem;font-size:1rem;font-weight:700;border:none;border-radius:8px;cursor:pointer; }" +
+        "    .pec-barcode-popup .popup-ok { background:#1e3a5f;color:#fff; }" +
+        "    .pec-barcode-popup .popup-cancel { background:#e2e8f0;color:#333; }" +
+        "  ';" +
+        "  document.head.appendChild(sty);" +
+
+        // ── MutationObserver watches for screen changes ──
+        "  var ob = new MutationObserver(function(){ pecTweakAll(); });" +
+        "  ob.observe(document.body, {childList:true, subtree:true});" +
+        "  pecTweakAll();" +
+
+        "  function pecTweakAll() {" +
+
+        // ── 1. PIN pad: bigger buttons + move check to OK row below ──
+        "    document.querySelectorAll('.pin-pad').forEach(function(pad){" +
+        "      if(pad.dataset.tweaked) return;" +
+        "      pad.dataset.tweaked='1';" +
+        // Find the check/submit key (✓ or similar action key)
+        "      var actionKeys = pad.querySelectorAll('.pin-key.action');" +
+        "      actionKeys.forEach(function(k){" +
+        "        if(k.textContent.trim()==='✓' || k.textContent.trim()==='OK'){" +
+        // Remove it from the grid
+        "          k.parentNode.removeChild(k);" +
+        // Rename to OK
+        "          k.textContent='OK';" +
+        // Create a row below the pad
+        "          var row = document.createElement('div');" +
+        "          row.className='pin-ok-row';" +
+        "          row.appendChild(k);" +
+        "          pad.parentNode.insertBefore(row, pad.nextSibling);" +
+        "        }" +
+        "      });" +
+        "    });" +
+
+        // ── 2. Manage Equipment: show who locked the equipment ──
+        "    document.querySelectorAll('.equip-card.locked').forEach(function(card){" +
+        "      if(card.dataset.lockTweaked) return;" +
+        "      card.dataset.lockTweaked='1';" +
+        // Look for data attribute or hidden element with locker info
+        "      var lockBy = card.dataset.lockedBy || card.getAttribute('data-locked-by') || '';" +
+        "      if(!lockBy){" +
+        // Try to find it in the card's text content structure
+        "        var spans = card.querySelectorAll('span,small,div');" +
+        "        for(var i=0;i<spans.length;i++){" +
+        "          var t=spans[i].textContent||'';" +
+        "          if(t.indexOf('Locked by')>=0){ lockBy=''; break; }" +
+        "        }" +
+        "      }" +
+        // If we have locker info and it's not already shown, inject it
+        "      if(lockBy && !card.querySelector('.lock-by-label')){" +
+        "        var lb = document.createElement('div');" +
+        "        lb.className='lock-by-label';" +
+        "        lb.style.cssText='font-size:.8rem;color:#d12421;font-weight:600;margin-top:.25rem;';" +
+        "        lb.textContent='Locked by: '+lockBy;" +
+        "        card.appendChild(lb);" +
+        "      }" +
+        "    });" +
+        // Also look for equipment list items rendered by the PWA with lockedByName
+        "    if(typeof PecEquipUI!=='undefined' && PecEquipUI._origRenderCard===undefined){" +
+        "      PecEquipUI._origRenderCard = PecEquipUI.renderCard || null;" +
+        "    }" +
+        // Fallback: scan for any element that has equipment data
+        "    document.querySelectorAll('[data-locked-by-name]').forEach(function(el){" +
+        "      if(el.dataset.lockNameShown) return;" +
+        "      el.dataset.lockNameShown='1';" +
+        "      var n=el.dataset.lockedByName;" +
+        "      if(n){" +
+        "        var lb2 = document.createElement('div');" +
+        "        lb2.style.cssText='font-size:.8rem;color:#d12421;font-weight:600;margin-top:.25rem;';" +
+        "        lb2.textContent='Marked out of service by: '+n;" +
+        "        el.appendChild(lb2);" +
+        "      }" +
+        "    });" +
+
+        // ── 3. Manage Equipment: barcode scan → popup for 2D barcode entry ──
+        "    document.querySelectorAll('.equip-scan-btn, [data-action=\"scan-equip-barcode\"]').forEach(function(btn){" +
+        "      if(btn.dataset.barcodePopup) return;" +
+        "      btn.dataset.barcodePopup='1';" +
+        "      btn.addEventListener('click', function(e){" +
+        "        e.stopPropagation(); e.preventDefault();" +
+        "        showBarcodePopup(function(val){" +
+        // Dispatch the same event/callback the original scan would
+        "          if(val){" +
+        "            var ev = new CustomEvent('barcode-scanned',{detail:{barcode:val}});" +
+        "            window.dispatchEvent(ev);" +
+        // Also try to set any visible scan input
+        "            var inp = document.querySelector('.scan-input');" +
+        "            if(inp){ inp.value=val; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.dispatchEvent(new Event('change',{bubbles:true})); }" +
+        "          }" +
+        "        });" +
+        "      }, true);" +
+        "    });" +
+        // Also intercept NFC scan buttons that say 'Scan Barcode' on equipment screens
+        "    document.querySelectorAll('.big-btn').forEach(function(btn){" +
+        "      var txt=(btn.textContent||'').toLowerCase();" +
+        "      if((txt.indexOf('scan barcode')>=0 || txt.indexOf('scan equipment')>=0) && !btn.dataset.barcodePopup){" +
+        // Only on equipment management screens, not checkout
+        "        var screen = btn.closest('.screen,.manage-equip-screen');" +
+        "        if(screen && (screen.classList.contains('manage-equip-screen') || " +
+        "            (screen.querySelector('.equip-card') || screen.querySelector('[data-action=\"add-equipment\"]')))){" +
+        "          btn.dataset.barcodePopup='1';" +
+        "          btn.addEventListener('click', function(e){" +
+        "            e.stopPropagation(); e.preventDefault();" +
+        "            showBarcodePopup(function(val){" +
+        "              if(val){" +
+        "                var inp=document.querySelector('.scan-input');" +
+        "                if(inp){ inp.value=val; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.dispatchEvent(new Event('change',{bubbles:true})); }" +
+        "                window.dispatchEvent(new CustomEvent('barcode-scanned',{detail:{barcode:val}}));" +
+        "              }" +
+        "            });" +
+        "          }, true);" +
+        "        }" +
+        "      }" +
+        "    });" +
+
+        // ── 4. Checkout screen: auto-focus the barcode input ──
+        "    var scanInp = document.querySelector('.scan-section .scan-input');" +
+        "    if(scanInp && !scanInp.dataset.autoFocused){" +
+        "      scanInp.dataset.autoFocused='1';" +
+        "      setTimeout(function(){ scanInp.focus(); }, 300);" +
+        "    }" +
+
+        "  }" + // end pecTweakAll
+
+        // ── Barcode popup helper ──
+        "  window.showBarcodePopup = function(cb){" +
+        "    var overlay = document.createElement('div');" +
+        "    overlay.className='pec-barcode-overlay';" +
+        "    overlay.innerHTML='<div class=\"pec-barcode-popup\">" +
+        "      <h3>📦 Enter Equipment Barcode</h3>" +
+        "      <input type=\"text\" id=\"popupBarcodeInput\" placeholder=\"Scan or type barcode\" autocomplete=\"off\">" +
+        "      <div class=\"popup-btns\">" +
+        "        <button class=\"popup-cancel\" id=\"popupBarcodeCancel\">Cancel</button>" +
+        "        <button class=\"popup-ok\" id=\"popupBarcodeOk\">OK</button>" +
+        "      </div>" +
+        "    </div>';" +
+        "    document.body.appendChild(overlay);" +
+        "    var inp = document.getElementById('popupBarcodeInput');" +
+        "    setTimeout(function(){ inp.focus(); }, 200);" +
+        "    document.getElementById('popupBarcodeOk').onclick=function(){" +
+        "      var v=inp.value.trim(); document.body.removeChild(overlay); cb(v||null);" +
+        "    };" +
+        "    document.getElementById('popupBarcodeCancel').onclick=function(){" +
+        "      document.body.removeChild(overlay); cb(null);" +
+        "    };" +
+        "    inp.addEventListener('keydown',function(e){" +
+        "      if(e.key==='Enter'){ document.getElementById('popupBarcodeOk').click(); }" +
+        "    });" +
+        "    overlay.addEventListener('click',function(e){" +
+        "      if(e.target===overlay){ document.body.removeChild(overlay); cb(null); }" +
+        "    });" +
+        "  };" +
+
         "})();";
 
     @Override
@@ -190,7 +373,7 @@ public class MainActivity extends BridgeActivity {
             "  v.textContent = 'PEC " + BUILD_VERSION + "';" +
             "  document.body.appendChild(v);" +
             "})();";
-        String combined = NFC_SETUP_JS + versionJs;
+        String combined = NFC_SETUP_JS + versionJs + UI_TWEAKS_JS;
 
         int[] delays = {0, 500, 1500, 3000, 5000, 8000};
         for (int delay : delays) {

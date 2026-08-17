@@ -46,9 +46,9 @@ body {
 
 /* PIN pad */
 .pin-display { text-align: center; font-size: 2rem; letter-spacing: .5rem; min-height: 2.5rem; margin: 1rem 0; }
-.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; max-width: 280px; margin: 0 auto; }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; max-width: 340px; margin: 0 auto; }
 .pin-key {
-  padding: 1rem; font-size: 1.3rem; font-weight: 700;
+  padding: 1.3rem; font-size: 1.6rem; font-weight: 700; min-height: 64px;
   border: 1px solid #ddd; border-radius: 8px; background: #fff;
   cursor: pointer; text-align: center;
   -webkit-tap-highlight-color: transparent;
@@ -56,6 +56,8 @@ body {
 .pin-key:active { background: #e2e8f0; }
 .pin-key.action { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
 .pin-key.danger { background: #d12421; color: #fff; border-color: #d12421; }
+.pin-ok-row { display: flex; justify-content: center; margin-top: .6rem; max-width: 340px; margin-left: auto; margin-right: auto; }
+.pin-ok-row .pin-key { flex: 1; font-size: 1.3rem; }
 
 /* Scan input */
 .scan-section { text-align: center; padding: 1.5rem; }
@@ -147,3 +149,13 @@ body {
 .settings-field input { width: 100%; padding: .6rem; font-size: .95rem; border: 1px solid #ccc; border-radius: 6px; }
 .settings-field .hint { font-size: .7rem; color: #888; margin-top: .25rem; }
 .version-info { font-size: .7rem; color: #999; text-align: center; margin-top: 1.5rem; }
+
+/* Barcode popup overlay */
+.pec-barcode-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.pec-barcode-popup { background: #fff; border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+.pec-barcode-popup h3 { margin: 0 0 1rem; text-align: center; font-size: 1.1rem; }
+.pec-barcode-popup input { width: 100%; padding: .8rem; font-size: 1.2rem; text-align: center; border: 2px solid #1e3a5f; border-radius: 8px; margin-bottom: .75rem; }
+.pec-barcode-popup .popup-btns { display: flex; gap: .5rem; }
+.pec-barcode-popup .popup-btns button { flex: 1; padding: .8rem; font-size: 1rem; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; }
+.pec-barcode-popup .popup-ok { background: #1e3a5f; color: #fff; }
+.pec-barcode-popup .popup-cancel { background: #e2e8f0; color: #333; }
