@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.Toast;
 
@@ -184,60 +185,22 @@ public class MainActivity extends BridgeActivity {
         "      }" +
         "    });" +
 
-// ── 3. Manage Equipment: barcode scan → popup for 2D barcode entry ──
-        // Clone buttons to strip original NFC handlers, then attach barcode popup
-        "    document.querySelectorAll('.equip-scan-btn, [data-action=\"scan-equip-barcode\"]').forEach(function(btn){" +
-        "      if(btn.dataset.barcodePopup) return;" +
-        "      var clone = btn.cloneNode(true);" +
-        "      clone.dataset.barcodePopup='1';" +
-        "      clone.addEventListener('click', function(e){" +
-        "        e.stopPropagation(); e.preventDefault();" +
-        "        showBarcodePopup(function(val){" +
-        "          if(val){" +
-        "            var ev = new CustomEvent('barcode-scanned',{detail:{barcode:val}});" +
-        "            window.dispatchEvent(ev);" +
-        "            var inp = document.querySelector('.scan-input');" +
-        "            if(inp){ inp.value=val; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.dispatchEvent(new Event('change',{bubbles:true})); }" +
-        "          }" +
-        "        });" +
-        "      });" +
-        "      btn.parentNode.replaceChild(clone, btn);" +
-        "    });" +
-        // Also intercept big buttons that say 'Scan Barcode' on equipment screens
-        "    document.querySelectorAll('.big-btn').forEach(function(btn){" +
-        "      var txt=(btn.textContent||'').toLowerCase();" +
-        "      if((txt.indexOf('scan barcode')>=0 || txt.indexOf('scan equipment')>=0) && !btn.dataset.barcodePopup){" +
-        "        var screen = btn.closest('.screen,.manage-equip-screen');" +
-        "        if(screen && (screen.classList.contains('manage-equip-screen') || " +
-        "            (screen.querySelector('.equip-card') || screen.querySelector('[data-action=\"add-equipment\"]')))){" +
-        "          var clone2 = btn.cloneNode(true);" +
-        "          clone2.dataset.barcodePopup='1';" +
-        "          clone2.textContent='Scan Equipment Barcode';" +
-        "          clone2.addEventListener('click', function(e){" +
-        "            e.stopPropagation(); e.preventDefault();" +
-        "            showBarcodePopup(function(val){" +
-        "              if(val){" +
-        "                var inp=document.querySelector('.scan-input');" +
-        "                if(inp){ inp.value=val; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.dispatchEvent(new Event('change',{bubbles:true})); }" +
-        "                window.dispatchEvent(new CustomEvent('barcode-scanned',{detail:{barcode:val}}));" +
-        "              }" +
-        "            });" +
-        "          });" +
-        "          btn.parentNode.replaceChild(clone2, btn);" +
-        "        }" +
-        "      }" +
-        "    });" +
-
         // ── 4. Checkout screen: auto-focus the barcode input ──
         "    var scanInp = document.querySelector('.scan-section .scan-input');" +
         "    if(scanInp && !scanInp.dataset.autoFocused){" +
         "      scanInp.dataset.autoFocused='1';" +
-        "      setTimeout(function(){ scanInp.focus(); }, 300);" +
+        "      scanInp.setAttribute('autofocus','');" +
+        "      scanInp.setAttribute('inputmode','text');" +
+        "      setTimeout(function(){" +
+        "        scanInp.focus();" +
+        "        scanInp.click();" +
+        "        scanInp.dispatchEvent(new Event('touchstart',{bubbles:true}));" +
+        "      }, 400);" +
         "    }" +
 
         "  }" + // end pecTweakAll
 
-        // ── Barcode popup helper ──
+        // ── Barcode popup helper (defined before equipment override uses it) ──
         "  window.showBarcodePopup = function(cb){" +
         "    var overlay = document.createElement('div');" +
         "    overlay.className='pec-barcode-overlay';" +
@@ -251,7 +214,8 @@ public class MainActivity extends BridgeActivity {
         "    </div>';" +
         "    document.body.appendChild(overlay);" +
         "    var inp = document.getElementById('popupBarcodeInput');" +
-        "    setTimeout(function(){ inp.focus(); }, 200);" +
+        "    inp.setAttribute('inputmode','text');" +
+        "    setTimeout(function(){ inp.focus(); inp.click(); }, 200);" +
         "    document.getElementById('popupBarcodeOk').onclick=function(){" +
         "      var v=inp.value.trim(); document.body.removeChild(overlay); cb(v||null);" +
         "    };" +
@@ -266,6 +230,78 @@ public class MainActivity extends BridgeActivity {
         "    });" +
         "  };" +
 
+        // ── 3. Manage Equipment: barcode scan → popup for 2D barcode entry ──
+        // This override is OUTSIDE pecTweakAll — it patches global NFC functions once.
+        // When the active screen is equipment-related, NFC scans show a barcode popup
+        // instead of waiting for a physical NFC tap.
+        "  (function(){" +
+        "    if(window.__pecEquipScanOverride) return;" +
+        "    window.__pecEquipScanOverride = true;" +
+        // Detect if we are on an equipment/manage screen (not login/badge)
+        "    function isEquipScreen(){" +
+        "      var active = document.querySelector('.screen.active');" +
+        "      if(!active) return false;" +
+        "      if(active.querySelector('.equip-card')) return true;" +
+        "      if(active.classList.contains('manage-equip-screen')) return true;" +
+        "      if(active.querySelector('[data-action=\"add-equipment\"]')) return true;" +
+        "      var h = active.querySelector('h2');" +
+        "      if(h){" +
+        "        var ht=h.textContent.toLowerCase();" +
+        "        if(ht.indexOf('equipment')>=0 || ht.indexOf('barcode')>=0 || ht.indexOf('lock')>=0) return true;" +
+        "      }" +
+        // Check for scan-section on non-login screens (checkout is ok for NFC)
+        "      var btns=active.querySelectorAll('.big-btn');" +
+        "      for(var i=0;i<btns.length;i++){" +
+        "        var bt=(btns[i].textContent||'').toLowerCase();" +
+        "        if(bt.indexOf('scan barcode')>=0||bt.indexOf('scan equipment')>=0) return true;" +
+        "      }" +
+        "      return false;" +
+        "    }" +
+        // Override NDEFReader.scan so equipment screens get popup immediately
+        "    if(window.NDEFReader){" +
+        "      var OrigNDEF = window.NDEFReader;" +
+        "      window.NDEFReader = function(){};" +
+        "      window.NDEFReader.prototype.scan = function(){" +
+        "        var self = this;" +
+        "        if(isEquipScreen()){" +
+        "          return new Promise(function(resolve){" +
+        "            showBarcodePopup(function(val){" +
+        "              if(val && self.onreading){" +
+        "                self.onreading({serialNumber:val,message:{records:[]}});" +
+        "              }" +
+        "              resolve();" +
+        "            });" +
+        "          });" +
+        "        }" +
+        // Not equipment screen - use native NFC events for badge login
+        "        var s = self;" +
+        "        window.addEventListener('nfc-tag-discovered', function handler(e){" +
+        "          window.removeEventListener('nfc-tag-discovered', handler);" +
+        "          if(s.onreading) s.onreading({serialNumber:e.detail.tagId,message:{records:[]}});" +
+        "        });" +
+        "        return Promise.resolve();" +
+        "      };" +
+        "    }" +
+        // Override PecAuth.readNfcBadge for equipment context too
+        "    function patchReadNfc(){" +
+        "      if(typeof PecAuth==='undefined') return false;" +
+        "      var origRead = PecAuth.readNfcBadge;" +
+        "      PecAuth.readNfcBadge = function(){" +
+        "        if(isEquipScreen()){" +
+        "          return new Promise(function(resolve){" +
+        "            showBarcodePopup(function(val){ resolve(val); });" +
+        "          });" +
+        "        }" +
+        "        return origRead.apply(PecAuth, arguments);" +
+        "      };" +
+        "      return true;" +
+        "    }" +
+        "    if(!patchReadNfc()){" +
+        "      var piv=setInterval(function(){ if(patchReadNfc()) clearInterval(piv); },300);" +
+        "      setTimeout(function(){ clearInterval(piv); },30000);" +
+        "    }" +
+        "  })();" +
+
         "})();";
 
     @Override
@@ -278,6 +314,10 @@ public class MainActivity extends BridgeActivity {
         // Store WebView reference DIRECTLY — getBridge().getWebView() may not
         // work after navigating to external CRAW page
         webView = getBridge().getWebView();
+
+        // Allow JS focus() to open the soft keyboard
+        WebSettings ws = webView.getSettings();
+        ws.setJavaScriptCanOpenWindowsAutomatically(true);
 
         // Expose native bridge via JavascriptInterface (persists across navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
