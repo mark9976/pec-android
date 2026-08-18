@@ -4,7 +4,7 @@
 	"webDir": "www",
 	"server": {
 		"androidScheme": "https",
-		"allowNavigation": ["biapps01.abarta.com"]
+		"allowNavigation": ["*"]
 	},
 	"plugins": {
 		"SplashScreen": {
@@ -26,7 +26,7 @@
 		}
 	},
 	"android": {
-		"allowMixedContent": false,
+		"allowMixedContent": true,
 		"backgroundColor": "#1e3a5f"
 	}
 }

@@ -6,8 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'www',
   server: {
     androidScheme: 'https',
-    // Allow the WebView to navigate to the CRAW server without opening external browser
-    allowNavigation: ['biapps01.abarta.com'],
+    // Allow the WebView to navigate to any configured server without opening external browser
+    allowNavigation: ['*'],
   },
   plugins: {
     SplashScreen: {
@@ -29,7 +29,7 @@ const config: CapacitorConfig = {
     }
   },
   android: {
-    allowMixedContent: false,
+    allowMixedContent: true,
     backgroundColor: '#1e3a5f'
   }
 };

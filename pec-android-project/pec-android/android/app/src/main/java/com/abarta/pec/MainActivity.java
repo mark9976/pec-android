@@ -10,8 +10,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
@@ -338,6 +340,16 @@ public class MainActivity extends BridgeActivity {
         // Allow JS focus() to open the soft keyboard
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptCanOpenWindowsAutomatically(true);
+        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+
+        // Keep ALL navigation inside the WebView (never open external browser)
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                view.loadUrl(request.getUrl().toString());
+                return true;
+            }
+        });
 
         // Expose native bridge via JavascriptInterface (persists across navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");

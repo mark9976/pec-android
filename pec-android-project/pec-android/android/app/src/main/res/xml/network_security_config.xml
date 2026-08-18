@@ -10,8 +10,8 @@
         </trust-anchors>
     </domain-config>
 
-    <!-- Default: trust system + user certs -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Default: trust system + user certs, allow cleartext for http testing -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
