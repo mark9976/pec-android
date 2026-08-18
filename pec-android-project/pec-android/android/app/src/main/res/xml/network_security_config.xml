@@ -10,6 +10,16 @@
         </trust-anchors>
     </domain-config>
 
+    <!-- Trust the self-signed test cert for local dev -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">10.0.0.224</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+            <certificates src="@raw/pec_test_cert" />
+        </trust-anchors>
+    </domain-config>
+
     <!-- Default: trust system + user certs, allow cleartext for http testing -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
