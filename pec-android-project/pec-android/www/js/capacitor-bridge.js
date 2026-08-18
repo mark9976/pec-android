@@ -44,7 +44,7 @@ const PecNative = (function() {
   /** Build the full handheld PWA URL with token for first auth */
   function getHandheldUrl() {
     const base = _serverUrl.replace(/\/+$/, '');
-    return base + '/handheld/?token=' + encodeURIComponent(_deviceToken);
+    return base + '/handheld/?token=' + encodeURIComponent(_deviceToken) + '&native=1&nfc=1';
   }
 
   async function setServerUrl(url) {

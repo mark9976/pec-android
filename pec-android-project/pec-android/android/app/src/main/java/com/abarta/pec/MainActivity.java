@@ -339,6 +339,8 @@ public class MainActivity extends BridgeActivity {
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptCanOpenWindowsAutomatically(true);
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // Identify as native app so the server PWA renders handheld/NFC mode
+        ws.setUserAgentString(ws.getUserAgentString() + " PEC-Native/1.0 NFC/1.0");
 
         // Expose native bridge via JavascriptInterface (persists across navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
