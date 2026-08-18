@@ -1,10 +1,12 @@
 /**
- * Sync engine: flushes pending sessions to server, refreshes reference data.
- * Uses PecNative.getApiBase() for the server URL.
+ * Sync engine: flushes pending sessions and queued offline actions to server,
+ * refreshes reference data. Wraps fetch() to auto-queue API mutations that
+ * fail due to network errors.
  */
 const PecSync = (function() {
   let _status = 'synced'; // synced | queued | syncing | error
   let _retryTimer = null;
+  const _originalFetch = window.fetch.bind(window);
 
   function api() { return PecNative.getApiBase() + '/api'; }
 
@@ -23,6 +25,107 @@ const PecSync = (function() {
     if (el) { el.className = 'hh-sync ' + s; el.title = s; }
   }
 
+  // ── Offline action queue ──
+
+  async function queueAction(url, method, options) {
+    let body = null;
+    if (options && options.body) {
+      body = (typeof options.body === 'string') ? options.body : String(options.body);
+    }
+    let headers = {};
+    if (options && options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((v, k) => { headers[k] = v; });
+      } else if (typeof options.headers === 'object') {
+        headers = Object.assign({}, options.headers);
+      }
+    }
+    const action = {
+      actionId: 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      url: url,
+      method: method,
+      headers: headers,
+      body: body,
+      createdAt: new Date().toISOString()
+    };
+    await PecDB.put('pendingActions', action);
+    console.log('[PecSync] Queued offline action:', method, url);
+  }
+
+  async function flushPendingActions() {
+    const actions = await PecDB.getAll('pendingActions');
+    if (actions.length === 0) return;
+    actions.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const action of actions) {
+      try {
+        const res = await _originalFetch(action.url, {
+          method: action.method,
+          headers: action.headers,
+          body: action.body
+        });
+        if (res.ok) {
+          await PecDB.remove('pendingActions', action.actionId);
+          console.log('[PecSync] Replayed action:', action.method, action.url);
+        } else {
+          console.warn('[PecSync] Replay failed:', action.method, action.url, res.status);
+        }
+      } catch (e) {
+        console.warn('[PecSync] Replay network error, will retry later:', e);
+        break;
+      }
+    }
+  }
+
+  function showSyncToast(msg) {
+    let toast = document.getElementById('pecSyncToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'pecSyncToast';
+      toast.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);' +
+        'background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:8px;font-size:.85rem;' +
+        'z-index:99999;opacity:0;transition:opacity .3s;pointer-events:none;text-align:center;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+  }
+
+  // ── Wrap fetch to auto-queue failed API mutations ──
+
+  window.fetch = async function(url, options) {
+    const urlStr = (url instanceof Request) ? url.url : String(url);
+    const method = ((options && options.method) || 'GET').toUpperCase();
+    const isMutation = method !== 'GET' && method !== 'HEAD';
+    const isPecApi = urlStr.indexOf('/api/') >= 0;
+    const isSyncEndpoint = urlStr.indexOf('/api/sync') >= 0;
+
+    if (!isMutation || !isPecApi || isSyncEndpoint) {
+      return _originalFetch.apply(this, arguments);
+    }
+
+    if (!navigator.onLine) {
+      await queueAction(urlStr, method, options);
+      setStatus('queued');
+      showSyncToast('Saved offline — will sync when connected');
+      return new Response(JSON.stringify({ queued: true }), {
+        status: 202, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    try {
+      return await _originalFetch.apply(this, arguments);
+    } catch (e) {
+      await queueAction(urlStr, method, options);
+      setStatus('queued');
+      showSyncToast('Saved offline — will sync when connected');
+      return new Response(JSON.stringify({ queued: true }), {
+        status: 202, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  };
+
   async function syncNow() {
     if (_status === 'syncing') return;
     if (!PecNative.isConfigured()) { setStatus('error'); return; }
@@ -33,7 +136,7 @@ const PecSync = (function() {
       // 1. Push pending sessions
       const pending = await PecDB.getAll('pendingSessions');
       if (pending.length > 0) {
-        const res = await fetch(api() + '/sync', {
+        const res = await _originalFetch(api() + '/sync', {
           method: 'POST',
           headers: authHeaders(),
           body: JSON.stringify({ sessions: pending })
@@ -48,7 +151,10 @@ const PecSync = (function() {
         }
       }
 
-      // 2. Refresh reference data
+      // 2. Replay queued offline actions (lock, unlock, etc.)
+      await flushPendingActions();
+
+      // 3. Refresh reference data
       await refreshReferenceData();
       setStatus('synced');
     } catch (e) {
@@ -62,12 +168,12 @@ const PecSync = (function() {
     if (!PecNative.isConfigured()) return;
     const hdrs = authHeaders();
     const [opRes, eqRes, clRes, shRes, siteRes, reasonRes] = await Promise.all([
-      fetch(api() + '/operators', { headers: hdrs }),
-      fetch(api() + '/equipment', { headers: hdrs }),
-      fetch(api() + '/checklist', { headers: hdrs }),
-      fetch(api() + '/shifts',    { headers: hdrs }),
-      fetch(api() + '/sites',     { headers: hdrs }),
-      fetch(api() + '/lockout-reasons', { headers: hdrs })
+      _originalFetch(api() + '/operators', { headers: hdrs }),
+      _originalFetch(api() + '/equipment', { headers: hdrs }),
+      _originalFetch(api() + '/checklist', { headers: hdrs }),
+      _originalFetch(api() + '/shifts',    { headers: hdrs }),
+      _originalFetch(api() + '/sites',     { headers: hdrs }),
+      _originalFetch(api() + '/lockout-reasons', { headers: hdrs })
     ]);
     if (opRes.ok) {
       const data = await opRes.json();
@@ -112,12 +218,13 @@ const PecSync = (function() {
   // Check for queued items periodically
   async function checkQueue() {
     const pending = await PecDB.getAll('pendingSessions');
-    if (pending.length > 0 && _status !== 'syncing') {
+    const actions = await PecDB.getAll('pendingActions');
+    if ((pending.length > 0 || actions.length > 0) && _status !== 'syncing') {
       setStatus('queued');
       if (navigator.onLine) syncNow();
     }
   }
   setInterval(checkQueue, 60000);
 
-  return { syncNow, refreshReferenceData, getStatus, setStatus };
+  return { syncNow, refreshReferenceData, getStatus, setStatus, queueAction };
 })();

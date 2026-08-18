@@ -1,10 +1,10 @@
 /**
  * IndexedDB wrapper for PEC handheld.
- * Stores: operators, equipment, checklist, shifts, pendingSessions, completedSessions, sites, lockoutReasons
+ * Stores: operators, equipment, checklist, shifts, pendingSessions, completedSessions, sites, lockoutReasons, pendingActions
  */
 const PecDB = (function() {
   const DB_NAME = 'pec_handheld';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   let _db = null;
 
   function open() {
@@ -29,6 +29,8 @@ const PecDB = (function() {
           db.createObjectStore('sites', { keyPath: 'siteId' });
         if (!db.objectStoreNames.contains('lockoutReasons'))
           db.createObjectStore('lockoutReasons', { keyPath: 'reasonId' });
+        if (!db.objectStoreNames.contains('pendingActions'))
+          db.createObjectStore('pendingActions', { keyPath: 'actionId' });
       };
       req.onblocked = () => {
         console.warn('[PecDB] Upgrade blocked — close other tabs and reload');

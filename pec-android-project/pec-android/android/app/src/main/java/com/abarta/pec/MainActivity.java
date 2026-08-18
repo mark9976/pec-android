@@ -198,6 +198,26 @@ public class MainActivity extends BridgeActivity {
         "      }, 400);" +
         "    }" +
 
+        // ── 5. Scan sections: add a Back button to return to menu ──
+        "    document.querySelectorAll('.scan-section').forEach(function(sec){" +
+        "      if(sec.dataset.backAdded) return;" +
+        "      sec.dataset.backAdded='1';" +
+        "      var btn=document.createElement('button');" +
+        "      btn.className='big-btn';" +
+        "      btn.style.cssText='margin-bottom:.5rem;font-size:.9rem;padding:.6rem;';" +
+        "      btn.textContent='\\u2190 Back';" +
+        "      btn.onclick=function(){" +
+        "        var screens=document.querySelectorAll('.screen');" +
+        "        var menu=null;" +
+        "        screens.forEach(function(s){ if(s.querySelector('.tile-grid')) menu=s; });" +
+        "        if(menu){" +
+        "          screens.forEach(function(s){ s.classList.remove('active'); });" +
+        "          menu.classList.add('active');" +
+        "        } else { history.back(); }" +
+        "      };" +
+        "      sec.insertBefore(btn,sec.firstChild);" +
+        "    });" +
+
         "  }" + // end pecTweakAll
 
         // ── Barcode popup helper (defined before equipment override uses it) ──
