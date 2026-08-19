@@ -13,11 +13,11 @@ import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.net.http.SslError;
 import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 
 /**
  * Main activity with NFC foreground dispatch.
@@ -346,14 +346,14 @@ public class MainActivity extends BridgeActivity {
         ws.setUserAgentString(ws.getUserAgentString() + " PEC-Native/1.0 NFC/1.0");
 
         // Accept self-signed cert for dev/test server
-        webView.setWebViewClient(new WebViewClient() {
+        getBridge().setWebViewClient(new BridgeWebViewClient(getBridge()) {
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 String host = error.getUrl() != null ? android.net.Uri.parse(error.getUrl()).getHost() : "";
                 if ("10.0.0.224".equals(host) || "PF5DZPYJ".equalsIgnoreCase(host)) {
                     handler.proceed();
                 } else {
-                    handler.cancel();
+                    super.onReceivedSslError(view, handler, error);
                 }
             }
         });
