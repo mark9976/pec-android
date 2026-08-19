@@ -25,8 +25,15 @@
         return;
       }
 
-      // Already configured — go to the remote PWA
-      navigateToPwa();
+      // Test connectivity before navigating — show settings if unreachable
+      const url = PecNative.getHandheldUrl();
+      try {
+        await fetch(url, { mode: 'no-cors', signal: AbortSignal.timeout(5000) });
+        navigateToPwa();
+      } catch (e) {
+        console.warn('[PEC] Server unreachable, showing settings:', e);
+        showSettingsScreen(false);
+      }
     } catch (e) {
       console.error('[PEC] Boot error:', e);
       showSettingsScreen(true);
