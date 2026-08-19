@@ -10,8 +10,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.net.http.SslError;
 import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
@@ -341,6 +344,19 @@ public class MainActivity extends BridgeActivity {
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         // Identify as native app so the server PWA renders handheld/NFC mode
         ws.setUserAgentString(ws.getUserAgentString() + " PEC-Native/1.0 NFC/1.0");
+
+        // Accept self-signed cert for dev/test server
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                String host = error.getUrl() != null ? android.net.Uri.parse(error.getUrl()).getHost() : "";
+                if ("10.0.0.224".equals(host) || "PF5DZPYJ".equalsIgnoreCase(host)) {
+                    handler.proceed();
+                } else {
+                    handler.cancel();
+                }
+            }
+        });
 
         // Expose native bridge via JavascriptInterface (persists across navigation)
         webView.addJavascriptInterface(new NfcJsBridge(), "PecNfcNative");
